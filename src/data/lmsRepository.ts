@@ -71,6 +71,7 @@ const inviteWebhook = import.meta.env.VITE_INVITE_EMAIL_WEBHOOK as string | unde
 const inviteWebhookTimeoutMs = Number(import.meta.env.VITE_INVITE_WEBHOOK_TIMEOUT_MS ?? '8000')
 const inviteWebhookMaxRetries = Number(import.meta.env.VITE_INVITE_WEBHOOK_RETRIES ?? '2')
 const inviteWebhookSecret = import.meta.env.VITE_INVITE_WEBHOOK_SECRET as string | undefined
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ''
 
 type InviteNotificationResult = {
   ok: boolean
@@ -181,6 +182,13 @@ const toInviteApiRequestLog = (row: DbInviteApiRequestLog): InviteApiRequestLog 
   createdAt: row.created_at,
 })
 
+const buildApiUrl = (path: string) => {
+  if (!apiBaseUrl) return path
+  const trimmedBase = apiBaseUrl.replace(/\/+$/, '')
+  const trimmedPath = path.startsWith('/') ? path : `/${path}`
+  return `${trimmedBase}${trimmedPath}`
+}
+
 const buildInviteLink = (token: string) => {
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   return `${origin}/invite/accept?token=${token}`
@@ -224,7 +232,7 @@ const getAccessToken = async () => {
   if (params.sourceIp) query.set('sourceIp', params.sourceIp)
   if (params.sort) query.set('sort', params.sort)
 
-  const response = await fetch(`/api/admin-logs?${query.toString()}`, {
+  const response = await fetch(buildApiUrl(`/api/admin-logs?${query.toString()}`), {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -254,7 +262,7 @@ const callAdminInvitationApi = async (
     throw new Error('管理者セッションが取得できません。再ログインしてください。')
   }
 
-  const response = await fetch('/api/admin-invitations', {
+  const response = await fetch(buildApiUrl('/api/admin-invitations'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

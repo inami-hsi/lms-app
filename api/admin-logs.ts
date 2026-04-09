@@ -8,14 +8,23 @@ type EmailStatus = 'success' | 'failed'
 type ApiAction = 'create' | 'resend' | 'revoke'
 type AllowedFilter = 'allowed' | 'blocked'
 
-const json = (status: number, body: Record<string, unknown>) =>
-  new Response(JSON.stringify(body), {
+const json = (status: number, body: Record<string, unknown>, res?: any) => {
+  if (res && typeof res.status === 'function') {
+    res.status(status).setHeader('Cache-Control', 'no-store')
+    return res.json(body)
+  }
+
+  return new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
   })
+}
 
-const getBearerToken = (req: Request) => {
-  const authHeader = req.headers.get('authorization')
+const getBearerToken = (req: any) => {
+  const authHeader =
+    typeof req?.headers?.get === 'function'
+      ? req.headers.get('authorization')
+      : req?.headers?.authorization || req?.headers?.Authorization
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null
   }
@@ -103,7 +112,7 @@ const parseCursor = (value: string | null) => {
   }
 }
 
-const ensureAdmin = async (req: Request) => {
+const ensureAdmin = async (req: any) => {
   const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
   const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -142,8 +151,22 @@ const ensureAdmin = async (req: Request) => {
   return { ok: true as const, adminClient }
 }
 
-const fetchEmailLogs = async (req: Request, adminClient: ReturnType<typeof createClient>) => {
-  const url = new URL(req.url)
+const toRequestUrl = (req: any) => {
+  if (typeof req?.url !== 'string') return new URL('http://localhost')
+  const base =
+    typeof req?.headers?.get === 'function'
+      ? req.headers.get('x-forwarded-host') || req.headers.get('host')
+      : req?.headers?.['x-forwarded-host'] || req?.headers?.host
+  const protocol =
+    typeof req?.headers?.get === 'function'
+      ? req.headers.get('x-forwarded-proto') || 'https'
+      : req?.headers?.['x-forwarded-proto'] || 'https'
+  const origin = base ? `${protocol}://${base}` : 'http://localhost'
+  return new URL(req.url, origin)
+}
+
+const fetchEmailLogs = async (req: any, adminClient: ReturnType<typeof createClient>, res?: any) => {
+  const url = toRequestUrl(req)
   const limit = parseLimit(url.searchParams.get('limit'), 30)
   const hours = parseHours(url.searchParams.get('hours'))
   const cursor = parseCursor(url.searchParams.get('cursor'))
@@ -191,7 +214,7 @@ const fetchEmailLogs = async (req: Request, adminClient: ReturnType<typeof creat
 
   const { data, error, count } = await query
   if (error) {
-    return json(500, { error: 'Failed to fetch invite email logs.' })
+    return json(500, { error: 'Failed to fetch invite email logs.' }, res)
   }
 
   const rows = data ?? []
@@ -200,11 +223,11 @@ const fetchEmailLogs = async (req: Request, adminClient: ReturnType<typeof creat
   const last = hasMore ? sliced[sliced.length - 1] : null
   const nextCursor = last ? encodeCursor(last.created_at, last.id) : null
 
-  return json(200, { emailLogs: sliced, nextCursor, hasMore, totalCount: count ?? null })
+  return json(200, { emailLogs: sliced, nextCursor, hasMore, totalCount: count ?? null }, res)
 }
 
-const fetchApiLogs = async (req: Request, adminClient: ReturnType<typeof createClient>) => {
-  const url = new URL(req.url)
+const fetchApiLogs = async (req: any, adminClient: ReturnType<typeof createClient>, res?: any) => {
+  const url = toRequestUrl(req)
   const limit = parseLimit(url.searchParams.get('limit'), 30)
   const hours = parseHours(url.searchParams.get('hours'))
   const cursor = parseCursor(url.searchParams.get('cursor'))
@@ -261,7 +284,7 @@ const fetchApiLogs = async (req: Request, adminClient: ReturnType<typeof createC
 
   const { data, error, count } = await query
   if (error) {
-    return json(500, { error: 'Failed to fetch invite API logs.' })
+    return json(500, { error: 'Failed to fetch invite API logs.' }, res)
   }
 
   const rows = data ?? []
@@ -270,27 +293,27 @@ const fetchApiLogs = async (req: Request, adminClient: ReturnType<typeof createC
   const last = hasMore ? sliced[sliced.length - 1] : null
   const nextCursor = last ? encodeCursor(last.created_at, last.id) : null
 
-  return json(200, { apiLogs: sliced, nextCursor, hasMore, totalCount: count ?? null })
+  return json(200, { apiLogs: sliced, nextCursor, hasMore, totalCount: count ?? null }, res)
 }
 
-export default async function handler(req: Request) {
+export default async function handler(req: any, res?: any) {
   if (req.method !== 'GET') {
-    return json(405, { error: 'Method not allowed' })
+    return json(405, { error: 'Method not allowed' }, res)
   }
 
   const authResult = await ensureAdmin(req)
   if (!authResult.ok) {
-    return json(authResult.status, { error: authResult.error })
+    return json(authResult.status, { error: authResult.error }, res)
   }
 
-  const type = (new URL(req.url).searchParams.get('type') ?? 'email') as LogType
+  const type = (toRequestUrl(req).searchParams.get('type') ?? 'email') as LogType
   if (type === 'email') {
-    return fetchEmailLogs(req, authResult.adminClient)
+    return fetchEmailLogs(req, authResult.adminClient, res)
   }
 
   if (type === 'api') {
-    return fetchApiLogs(req, authResult.adminClient)
+    return fetchApiLogs(req, authResult.adminClient, res)
   }
 
-  return json(400, { error: 'Unsupported log type.' })
+  return json(400, { error: 'Unsupported log type.' }, res)
 }
