@@ -7,10 +7,35 @@ type InvitePayload = {
 
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000
 
-const json = (status: number, body: Record<string, unknown>) =>
+const getCorsOrigin = (req: Request) => {
+  const origin = req.headers.get('origin')
+  if (!origin) return null
+
+  const allowed = new Set([
+    'https://lms.ai-nagoya.com',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+  ])
+  return allowed.has(origin) ? origin : null
+}
+
+const buildCorsHeaders = (req: Request) => {
+  const origin = getCorsOrigin(req)
+  if (!origin) return {}
+
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'POST,OPTIONS',
+    'Access-Control-Allow-Headers': 'authorization,content-type,apikey,x-client-info,x-invite-timestamp,x-invite-signature',
+    Vary: 'Origin',
+  } as Record<string, string>
+}
+
+const json = (req: Request, status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...buildCorsHeaders(req) },
   })
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -62,8 +87,12 @@ const buildHtml = (inviteLink: string, expiresAt: string) => {
 }
 
 export default async function handler(req: Request) {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: buildCorsHeaders(req) })
+  }
+
   if (req.method !== 'POST') {
-    return json(405, { error: 'Method not allowed' })
+    return json(req, 405, { error: 'Method not allowed' })
   }
 
   const resendApiKey = process.env.RESEND_API_KEY
@@ -72,7 +101,7 @@ export default async function handler(req: Request) {
   const retries = Number(process.env.RESEND_RETRIES ?? '2')
 
   if (!resendApiKey) {
-    return json(500, { error: 'RESEND_API_KEY is not set' })
+    return json(req, 500, { error: 'RESEND_API_KEY is not set' })
   }
 
   let payload: InvitePayload
@@ -81,16 +110,16 @@ export default async function handler(req: Request) {
     rawBody = await req.text()
     payload = JSON.parse(rawBody) as InvitePayload
   } catch {
-    return json(400, { error: 'Invalid JSON body' })
+    return json(req, 400, { error: 'Invalid JSON body' })
   }
 
   const verified = await verifySignature(req, rawBody)
   if (!verified) {
-    return json(401, { error: 'Invalid webhook signature' })
+    return json(req, 401, { error: 'Invalid webhook signature' })
   }
 
   if (!payload.email || !payload.inviteLink || !payload.expiresAt) {
-    return json(400, { error: 'email, inviteLink and expiresAt are required' })
+    return json(req, 400, { error: 'email, inviteLink and expiresAt are required' })
   }
 
   const attempts = Math.max(1, retries + 1)
@@ -124,7 +153,7 @@ export default async function handler(req: Request) {
       }
 
       const result = await response.json()
-      return json(200, { ok: true, attempt: attempt + 1, result })
+      return json(req, 200, { ok: true, attempt: attempt + 1, result })
     } catch (error) {
       clearTimeout(timeout)
       lastError = error instanceof Error ? error.message : 'unknown error'
@@ -135,5 +164,5 @@ export default async function handler(req: Request) {
     }
   }
 
-  return json(502, { error: 'Failed to send email with Resend', detail: lastError, retries: attempts - 1 })
+  return json(req, 502, { error: 'Failed to send email with Resend', detail: lastError, retries: attempts - 1 })
 }

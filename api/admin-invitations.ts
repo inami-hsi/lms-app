@@ -35,10 +35,35 @@ type DbInvitation = {
   token: string
 }
 
-const json = (status: number, body: Record<string, unknown>) =>
+const getCorsOrigin = (req: Request) => {
+  const origin = req.headers.get('origin')
+  if (!origin) return null
+
+  const allowed = new Set([
+    'https://lms.ai-nagoya.com',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+  ])
+  return allowed.has(origin) ? origin : null
+}
+
+const buildCorsHeaders = (req: Request) => {
+  const origin = getCorsOrigin(req)
+  if (!origin) return {}
+
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'POST,OPTIONS',
+    'Access-Control-Allow-Headers': 'authorization,content-type,apikey,x-client-info',
+    Vary: 'Origin',
+  } as Record<string, string>
+}
+
+const json = (req: Request, status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...buildCorsHeaders(req) },
   })
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -317,20 +342,24 @@ const ensureAdmin = async (req: Request) => {
 }
 
 export default async function handler(req: Request) {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: buildCorsHeaders(req) })
+  }
+
   if (req.method !== 'POST') {
-    return json(405, { error: 'Method not allowed' })
+    return json(req, 405, { error: 'Method not allowed' })
   }
 
   let body: RequestBody
   try {
     body = (await req.json()) as RequestBody
   } catch {
-    return json(400, { error: 'Invalid JSON body.' })
+    return json(req, 400, { error: 'Invalid JSON body.' })
   }
 
   const authResult = await ensureAdmin(req)
   if (!authResult.ok) {
-    return json(authResult.status, { error: authResult.error })
+    return json(req, authResult.status, { error: authResult.error })
   }
 
   const { adminClient, userId } = authResult
@@ -345,7 +374,7 @@ export default async function handler(req: Request) {
     })
 
     if (!rateResult.allowed) {
-      return json(429, {
+      return json(req, 429, {
         error: rateResult.error,
         retryAfterSec: RATE_LIMIT_WINDOW_SEC,
       })
@@ -354,7 +383,7 @@ export default async function handler(req: Request) {
 
   if (body.action === 'create') {
     if (!body.email) {
-      return json(400, { error: 'email is required for create.' })
+      return json(req, 400, { error: 'email is required for create.' })
     }
 
     const token = crypto.randomUUID()
@@ -373,7 +402,7 @@ export default async function handler(req: Request) {
       .single()
 
     if (error || !data) {
-      return json(500, { error: 'Failed to create invitation.' })
+      return json(req, 500, { error: 'Failed to create invitation.' })
     }
 
     const invitation = toInvitation(data as DbInvitation, req)
@@ -398,12 +427,12 @@ export default async function handler(req: Request) {
       invitation.notificationError = notify.error
     }
 
-    return json(200, { invitation })
+    return json(req, 200, { invitation })
   }
 
   if (body.action === 'resend') {
     if (!body.invitationId) {
-      return json(400, { error: 'invitationId is required for resend.' })
+      return json(req, 400, { error: 'invitationId is required for resend.' })
     }
 
     const token = crypto.randomUUID()
@@ -417,7 +446,7 @@ export default async function handler(req: Request) {
       .single()
 
     if (error || !data) {
-      return json(500, { error: 'Failed to resend invitation.' })
+      return json(req, 500, { error: 'Failed to resend invitation.' })
     }
 
     const invitation = toInvitation(data as DbInvitation, req)
@@ -442,12 +471,12 @@ export default async function handler(req: Request) {
       invitation.notificationError = notify.error
     }
 
-    return json(200, { invitation })
+    return json(req, 200, { invitation })
   }
 
   if (body.action === 'revoke') {
     if (!body.invitationId || !body.email) {
-      return json(400, { error: 'invitationId and email are required for revoke.' })
+      return json(req, 400, { error: 'invitationId and email are required for revoke.' })
     }
 
     const { data, error } = await adminClient
@@ -458,13 +487,13 @@ export default async function handler(req: Request) {
       .single()
 
     if (error || !data) {
-      return json(500, { error: 'Failed to revoke invitation.' })
+      return json(req, 500, { error: 'Failed to revoke invitation.' })
     }
 
     await adminClient.from('allowed_emails').delete().eq('email', body.email)
 
-    return json(200, { invitation: toInvitation(data as DbInvitation, req) })
+    return json(req, 200, { invitation: toInvitation(data as DbInvitation, req) })
   }
 
-  return json(400, { error: 'Unsupported action.' })
+  return json(req, 400, { error: 'Unsupported action.' })
 }

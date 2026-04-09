@@ -8,15 +8,47 @@ type EmailStatus = 'success' | 'failed'
 type ApiAction = 'create' | 'resend' | 'revoke'
 type AllowedFilter = 'allowed' | 'blocked'
 
-const json = (status: number, body: Record<string, unknown>, res?: any) => {
+const getCorsOrigin = (req: any) => {
+  const origin =
+    typeof req?.headers?.get === 'function' ? req.headers.get('origin') : req?.headers?.origin || req?.headers?.Origin
+  if (!origin || typeof origin !== 'string') return null
+
+  // Lock down to known frontends.
+  const allowed = new Set([
+    'https://lms.ai-nagoya.com',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+  ])
+  return allowed.has(origin) ? origin : null
+}
+
+const buildCorsHeaders = (req: any) => {
+  const origin = getCorsOrigin(req)
+  if (!origin) return {}
+
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET,OPTIONS',
+    'Access-Control-Allow-Headers': 'authorization,content-type,apikey,x-client-info',
+    Vary: 'Origin',
+  } as Record<string, string>
+}
+
+const json = (req: any, status: number, body: Record<string, unknown>, res?: any) => {
+  const corsHeaders = buildCorsHeaders(req)
   if (res && typeof res.status === 'function') {
-    res.status(status).setHeader('Cache-Control', 'no-store')
+    res.status(status)
+    res.setHeader('Cache-Control', 'no-store')
+    for (const [key, value] of Object.entries(corsHeaders)) {
+      res.setHeader(key, value)
+    }
     return res.json(body)
   }
 
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders },
   })
 }
 
@@ -214,7 +246,7 @@ const fetchEmailLogs = async (req: any, adminClient: ReturnType<typeof createCli
 
   const { data, error, count } = await query
   if (error) {
-    return json(500, { error: 'Failed to fetch invite email logs.' }, res)
+    return json(req, 500, { error: 'Failed to fetch invite email logs.' }, res)
   }
 
   const rows = data ?? []
@@ -223,7 +255,7 @@ const fetchEmailLogs = async (req: any, adminClient: ReturnType<typeof createCli
   const last = hasMore ? sliced[sliced.length - 1] : null
   const nextCursor = last ? encodeCursor(last.created_at, last.id) : null
 
-  return json(200, { emailLogs: sliced, nextCursor, hasMore, totalCount: count ?? null }, res)
+  return json(req, 200, { emailLogs: sliced, nextCursor, hasMore, totalCount: count ?? null }, res)
 }
 
 const fetchApiLogs = async (req: any, adminClient: ReturnType<typeof createClient>, res?: any) => {
@@ -284,7 +316,7 @@ const fetchApiLogs = async (req: any, adminClient: ReturnType<typeof createClien
 
   const { data, error, count } = await query
   if (error) {
-    return json(500, { error: 'Failed to fetch invite API logs.' }, res)
+    return json(req, 500, { error: 'Failed to fetch invite API logs.' }, res)
   }
 
   const rows = data ?? []
@@ -293,17 +325,29 @@ const fetchApiLogs = async (req: any, adminClient: ReturnType<typeof createClien
   const last = hasMore ? sliced[sliced.length - 1] : null
   const nextCursor = last ? encodeCursor(last.created_at, last.id) : null
 
-  return json(200, { apiLogs: sliced, nextCursor, hasMore, totalCount: count ?? null }, res)
+  return json(req, 200, { apiLogs: sliced, nextCursor, hasMore, totalCount: count ?? null }, res)
 }
 
 export default async function handler(req: any, res?: any) {
+  if (req.method === 'OPTIONS') {
+    const corsHeaders = buildCorsHeaders(req)
+    if (res && typeof res.status === 'function') {
+      res.status(204)
+      for (const [key, value] of Object.entries(corsHeaders)) {
+        res.setHeader(key, value)
+      }
+      return res.end()
+    }
+    return new Response(null, { status: 204, headers: corsHeaders })
+  }
+
   if (req.method !== 'GET') {
-    return json(405, { error: 'Method not allowed' }, res)
+    return json(req, 405, { error: 'Method not allowed' }, res)
   }
 
   const authResult = await ensureAdmin(req)
   if (!authResult.ok) {
-    return json(authResult.status, { error: authResult.error }, res)
+    return json(req, authResult.status, { error: authResult.error }, res)
   }
 
   const type = (toRequestUrl(req).searchParams.get('type') ?? 'email') as LogType
@@ -315,5 +359,5 @@ export default async function handler(req: any, res?: any) {
     return fetchApiLogs(req, authResult.adminClient, res)
   }
 
-  return json(400, { error: 'Unsupported log type.' }, res)
+  return json(req, 400, { error: 'Unsupported log type.' }, res)
 }
