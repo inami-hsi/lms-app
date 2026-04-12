@@ -209,8 +209,12 @@ export const AdminUsersPage = () => {
     setApiLogRangeHours(24)
   }
 
-  const emailLogsSorted = emailLogSort === 'desc' ? emailLogs : [...emailLogs].reverse()
-  const apiLogsSorted = apiLogSort === 'desc' ? apiLogs : [...apiLogs].reverse()
+  // The API already returns results in the selected order (sort=asc|desc),
+  // so do not reverse client-side.
+  const emailLogsSorted = emailLogs
+  // The API already returns results in the selected order (sort=asc|desc),
+  // so do not reverse client-side.
+  const apiLogsSorted = apiLogs
   const selectedEmailLog = selectedEmailLogId ? emailLogs.find((log) => log.id === selectedEmailLogId) ?? null : null
   const selectedApiLog = selectedApiLogId ? apiLogs.find((log) => log.id === selectedApiLogId) ?? null : null
   const selectedEmailIndex = selectedEmailLogId
@@ -593,11 +597,13 @@ export const AdminUsersPage = () => {
     emailLogActionFilter,
     emailLogStatusFilter,
     debouncedEmailLogEmailFilter,
+    emailLogSort,
     apiLogRangeHours,
     apiLogActionFilter,
     apiLogAllowedFilter,
     debouncedApiLogTriggeredByFilter,
     debouncedApiLogSourceIpFilter,
+    apiLogSort,
   ])
 
   const refreshInvitations = async () => {

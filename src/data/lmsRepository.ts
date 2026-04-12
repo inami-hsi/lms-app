@@ -100,6 +100,22 @@ type AdminApiLogsApiResponse = {
   totalCount?: number | null
 }
 
+const toBase64 = (value: string) => {
+  if (typeof btoa === 'function') return btoa(value)
+
+  // Fallback for very old runtimes: encode as UTF-8 bytes then base64.
+  const bytes = new TextEncoder().encode(value)
+  let binary = ''
+  bytes.forEach((b) => {
+    binary += String.fromCharCode(b)
+  })
+  return btoa(binary)
+}
+
+const encodeCursor = (createdAt: string, id: string) => {
+  return toBase64(JSON.stringify({ createdAt, id }))
+}
+
 export const getRetryAfterSecFromError = (error: unknown): number | null => {
   if (!(error instanceof Error)) return null
   const candidate = (error as InviteApiError).retryAfterSec
@@ -607,12 +623,15 @@ export const listInviteEmailLogsPage = async (options?: {
     sort: options?.sort,
   })) as AdminEmailLogsApiResponse
 
-  return {
-    items: (payload.emailLogs ?? []).map(toInviteEmailLog),
-    nextCursor: payload.nextCursor ?? null,
-    hasMore: Boolean(payload.hasMore),
-    totalCount: typeof payload.totalCount === 'number' ? payload.totalCount : null,
-  }
+  const items = (payload.emailLogs ?? []).map(toInviteEmailLog)
+  const totalCount = typeof payload.totalCount === 'number' ? payload.totalCount : null
+  const hasMore =
+    Boolean(payload.hasMore) || (typeof totalCount === 'number' ? items.length < totalCount : false)
+  const nextCursor =
+    payload.nextCursor ??
+    (hasMore && items.length > 0 ? encodeCursor(items[items.length - 1].createdAt, items[items.length - 1].id) : null)
+
+  return { items, nextCursor, hasMore, totalCount }
 }
 
 export const listInviteEmailLogs = async (options?: {
@@ -652,12 +671,15 @@ export const listInviteApiRequestLogsPage = async (options?: {
     sort: options?.sort,
   })) as AdminApiLogsApiResponse
 
-  return {
-    items: (payload.apiLogs ?? []).map(toInviteApiRequestLog),
-    nextCursor: payload.nextCursor ?? null,
-    hasMore: Boolean(payload.hasMore),
-    totalCount: typeof payload.totalCount === 'number' ? payload.totalCount : null,
-  }
+  const items = (payload.apiLogs ?? []).map(toInviteApiRequestLog)
+  const totalCount = typeof payload.totalCount === 'number' ? payload.totalCount : null
+  const hasMore =
+    Boolean(payload.hasMore) || (typeof totalCount === 'number' ? items.length < totalCount : false)
+  const nextCursor =
+    payload.nextCursor ??
+    (hasMore && items.length > 0 ? encodeCursor(items[items.length - 1].createdAt, items[items.length - 1].id) : null)
+
+  return { items, nextCursor, hasMore, totalCount }
 }
 
 export const listInviteApiRequestLogs = async (options?: {

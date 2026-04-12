@@ -18,14 +18,21 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 const toRole = (email: string): UserRole => (email.endsWith('@admin.local') ? 'admin' : 'learner')
 
+const withTimeout = async <T,>(promiseLike: PromiseLike<T>, ms: number, fallback: T): Promise<T> => {
+  const timeout = new Promise<T>((resolve) => {
+    window.setTimeout(() => resolve(fallback), ms)
+  })
+  return Promise.race([Promise.resolve(promiseLike as any), timeout])
+}
+
 const getRoleFromProfile = async (userId: string, email: string): Promise<UserRole> => {
   if (!supabase) return toRole(email)
 
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', userId)
-    .maybeSingle()
+  const { data, error } = await withTimeout(
+    supabase.from('profiles').select('role').eq('id', userId).maybeSingle().then((result) => result),
+    4000,
+    { data: null, error: new Error('timeout') } as any,
+  )
 
   if (error || !data?.role) {
     return toRole(email)
@@ -37,11 +44,11 @@ const getRoleFromProfile = async (userId: string, email: string): Promise<UserRo
 const isEmailAllowed = async (email: string) => {
   if (!supabase) return false
 
-  const { data, error } = await supabase
-    .from('allowed_emails')
-    .select('id')
-    .eq('email', email)
-    .maybeSingle()
+  const { data, error } = await withTimeout(
+    supabase.from('allowed_emails').select('id').eq('email', email).maybeSingle().then((result) => result),
+    4000,
+    { data: null, error: new Error('timeout') } as any,
+  )
 
   if (error) {
     return false
@@ -58,6 +65,25 @@ const sessionToUser = (session: Session | null): AuthUser | null => {
     email: session.user.email,
     name: session.user.user_metadata.full_name ?? session.user.email,
     role: toRole(session.user.email),
+  }
+}
+
+const getStoredSessionFallback = (): Session | null => {
+  if (!isSupabaseConfigured || !supabase) return null
+
+  try {
+    const url = new URL(import.meta.env.VITE_SUPABASE_URL)
+    const ref = url.hostname.split('.')[0]
+    const key = `sb-${ref}-auth-token`
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+
+    const data = JSON.parse(raw)
+    if (!data?.user) return null
+
+    return { user: data.user } as Session
+  } catch {
+    return null
   }
 }
 
@@ -97,17 +123,61 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return
     }
 
-    supabase.auth.getSession().then(async ({ data }) => {
-      await resolveUser(data.session)
-      setLoading(false)
+    const client = supabase
+    let cancelled = false
+    const finishLoading = () => {
+      if (!cancelled) setLoading(false)
+    }
+
+    const resolveWithFallback = async (session: Session | null) => {
+      try {
+        await resolveUser(session)
+      } catch (error) {
+        console.error('auth resolve error', error)
+        setUser(null)
+        setAuthError('認証状態の確認に失敗しました。再読み込みしてください。')
+      }
+    }
+
+    const runInitialCheck = async () => {
+      try {
+        const { data, error } = await client.auth.getSession()
+        if (cancelled) return
+        if (error) throw error
+
+        const session = data.session ?? getStoredSessionFallback()
+        // Never block rendering on network/RLS issues.
+        void resolveWithFallback(session).finally(finishLoading)
+      } catch (error) {
+        console.error('auth session error', error)
+        const fallback = getStoredSessionFallback()
+        if (fallback) {
+          void resolveWithFallback(fallback).finally(finishLoading)
+        } else {
+          setUser(null)
+          setAuthError('認証状態の確認に失敗しました。再読み込みしてください。')
+          finishLoading()
+        }
+      }
+    }
+
+    runInitialCheck()
+
+    const { data } = client.auth.onAuthStateChange(async (_event, session) => {
+      void resolveWithFallback(session).finally(finishLoading)
     })
 
-    const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      await resolveUser(session)
-      setLoading(false)
-    })
+    const timeoutId = window.setTimeout(async () => {
+      if (cancelled) return
+      // Safety net: never keep the app on a spinner forever.
+      finishLoading()
+    }, 5000)
 
-    return () => data.subscription.unsubscribe()
+    return () => {
+      cancelled = true
+      data.subscription.unsubscribe()
+      window.clearTimeout(timeoutId)
+    }
   }, [])
 
   const signInWithGoogle = async () => {
