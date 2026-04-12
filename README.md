@@ -119,3 +119,20 @@ For `type=api`:
 Notes:
 - `totalCount` is based on the current query (and may represent remaining rows when `cursor` is used).
 - Responses include `Cache-Control: no-store`.
+
+## Admin Logs Ops Notes
+
+### Recommended Indexes
+If `invite_email_logs` / `invite_api_request_logs` grows, apply the index section in `supabase/schema.sql`.
+If you've already applied the schema, you can copy/paste the index block into Supabase `SQL Editor` and run it.
+
+### Cursor + Sort Verification (Manual)
+To stress-test paging with many rows sharing the same `created_at` (tie-break by `id`), run:
+- `supabase/admin_logs_testdata.sql` in Supabase `SQL Editor`
+
+Then confirm in `https://lms.ai-nagoya.com/admin/users`:
+- Email logs: `sort=desc` and page through `もっと見る` until end (no duplicates / no missing).
+- Switch to `sort=asc` and repeat.
+- Repeat the same for API logs.
+
+Cleanup SQL (optional) is included at the bottom of `supabase/admin_logs_testdata.sql`.

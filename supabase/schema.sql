@@ -2,6 +2,9 @@
 
 create extension if not exists pgcrypto;
 
+-- Optional (performance): enable if you want fast ILIKE search on text columns.
+-- create extension if not exists pg_trgm;
+
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   name text not null default '',
@@ -82,6 +85,32 @@ create table if not exists public.invite_api_request_logs (
   reason text,
   created_at timestamptz not null default now()
 );
+
+-- Indexes (performance)
+-- Note: If you already ran this schema, apply these via SQL Editor separately.
+create index if not exists invite_email_logs_created_at_id_idx
+  on public.invite_email_logs (created_at desc, id desc);
+
+create index if not exists invite_api_request_logs_created_at_id_idx
+  on public.invite_api_request_logs (created_at desc, id desc);
+
+create index if not exists invite_email_logs_action_status_created_at_idx
+  on public.invite_email_logs (action, status, created_at desc);
+
+create index if not exists invite_api_request_logs_action_allowed_created_at_idx
+  on public.invite_api_request_logs (action, allowed, created_at desc);
+
+create index if not exists invite_api_request_logs_triggered_by_created_at_idx
+  on public.invite_api_request_logs (triggered_by, created_at desc);
+
+create index if not exists invite_api_request_logs_source_ip_created_at_idx
+  on public.invite_api_request_logs (source_ip, created_at desc);
+
+-- Optional (performance): use trigram indexes for fast ILIKE '%term%' search.
+-- create index if not exists invite_email_logs_email_trgm_idx
+--   on public.invite_email_logs using gin (email gin_trgm_ops);
+-- create index if not exists invite_api_request_logs_source_ip_trgm_idx
+--   on public.invite_api_request_logs using gin (source_ip gin_trgm_ops);
 
 create or replace function public.expire_pending_invitations()
 returns integer
