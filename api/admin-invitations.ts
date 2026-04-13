@@ -172,7 +172,27 @@ const sendInviteEmail = async (input: { email: string; inviteLink: string; expir
 
       clearTimeout(timeout)
       if (!response.ok) {
-        lastError = `Resend API error: ${response.status}`
+        let detail = ''
+        try {
+          const text = await response.text()
+          // Resend usually returns JSON, but keep it robust.
+          try {
+            const parsed = JSON.parse(text) as { message?: unknown; error?: unknown }
+            const msg =
+              (typeof parsed?.message === 'string' && parsed.message) ||
+              (typeof parsed?.error === 'string' && parsed.error) ||
+              ''
+            detail = msg || text
+          } catch {
+            detail = text
+          }
+        } catch {
+          detail = ''
+        }
+
+        const normalized = detail ? detail.replace(/\s+/g, ' ').trim() : ''
+        const clipped = normalized ? normalized.slice(0, 240) : ''
+        lastError = clipped ? `Resend API error: ${response.status} (${clipped})` : `Resend API error: ${response.status}`
         if (attempt < attempts - 1) {
           await wait(400 * (attempt + 1))
         }
