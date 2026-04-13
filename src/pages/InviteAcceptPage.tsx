@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '../auth/AuthContext'
-import { acceptInvitationToken, getInvitationByToken } from '../data/lmsRepository'
+import { acceptInvitationToken, getInvitationInfoByToken } from '../data/lmsRepository'
 
 const statusMessage: Record<string, string> = {
   accepted: '招待を受諾しました。コース一覧へ移動できます。',
@@ -24,8 +24,8 @@ export const InviteAcceptPage = () => {
   useEffect(() => {
     const load = async () => {
       if (!token) return
-      const invite = await getInvitationByToken(token)
-      setInviteEmail(invite?.email ?? '')
+      const invite = await getInvitationInfoByToken(token)
+      setInviteEmail(invite?.emailMasked ?? '')
     }
 
     void load()

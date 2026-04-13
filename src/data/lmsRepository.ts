@@ -67,6 +67,12 @@ type DbInviteApiRequestLog = {
 
 export type AcceptInvitationResult = 'accepted' | 'invalid' | 'expired' | 'already-used' | 'email-mismatch'
 
+export type InvitationTokenInfo = {
+  emailMasked: string
+  status: Invitation['status']
+  expiresAt: string
+}
+
 const inviteWebhook = import.meta.env.VITE_INVITE_EMAIL_WEBHOOK as string | undefined
 const inviteWebhookTimeoutMs = Number(import.meta.env.VITE_INVITE_WEBHOOK_TIMEOUT_MS ?? '8000')
 const inviteWebhookMaxRetries = Number(import.meta.env.VITE_INVITE_WEBHOOK_RETRIES ?? '2')
@@ -439,6 +445,29 @@ export const getInvitationByToken = async (token: string) => {
   }
 
   return invitation
+}
+
+export const getInvitationInfoByToken = async (token: string): Promise<InvitationTokenInfo | null> => {
+  if (!token.trim()) return null
+
+  if (!isSupabaseConfigured || !supabase) {
+    const invitation = demoInvitations.find((item) => item.token === token)
+    if (!invitation) return null
+    return {
+      emailMasked: invitation.email,
+      status: invitation.status,
+      expiresAt: invitation.expiresAt,
+    }
+  }
+
+  const response = await fetch(buildApiUrl(`/api/invite-token?token=${encodeURIComponent(token)}`), { method: 'GET' })
+  if (!response.ok) {
+    throw new Error('招待情報の取得に失敗しました。')
+  }
+
+  const json = (await response.json()) as { invitation?: { emailMasked: string; status: Invitation['status']; expiresAt: string } | null }
+  if (!json.invitation) return null
+  return json.invitation
 }
 
 export const listCourses = async () => {
@@ -845,39 +874,31 @@ export const acceptInvitationToken = async (payload: {
     return 'accepted'
   }
 
-  const invitation = await getInvitationByToken(payload.token)
-  if (!invitation || !invitation.id) return 'invalid'
-  if (invitation.status !== 'pending') return 'already-used'
-  if (isExpired(invitation.expiresAt)) {
-    await supabase.from('invitations').update({ status: 'expired' }).eq('id', invitation.id)
-    return 'expired'
+  const accessToken = await getAccessToken()
+  if (!accessToken) {
+    throw new Error('セッションが取得できません。再ログインしてください。')
   }
-  if (invitation.email.toLowerCase() !== payload.userEmail.toLowerCase()) return 'email-mismatch'
 
-  const acceptedAt = new Date().toISOString()
-  const { error: updateError } = await supabase
-    .from('invitations')
-    .update({ status: 'accepted', accepted_at: acceptedAt, used_at: acceptedAt })
-    .eq('id', invitation.id)
+  const response = await fetch(buildApiUrl('/api/invite-accept'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ token: payload.token }),
+  })
 
-  if (updateError) return 'invalid'
+  if (!response.ok) {
+    let message = '招待受諾に失敗しました。'
+    try {
+      const body = (await response.json()) as { error?: string }
+      if (body.error) message = body.error
+    } catch {
+      // Keep default message.
+    }
+    throw new Error(message)
+  }
 
-  await supabase
-    .from('allowed_emails')
-    .upsert({ email: payload.userEmail, created_by: payload.userId }, { onConflict: 'email' })
-
-  await supabase
-    .from('profiles')
-    .upsert(
-      {
-        id: payload.userId,
-        email: payload.userEmail,
-        name: payload.userEmail,
-        role: 'learner',
-        is_active: true,
-      },
-      { onConflict: 'id' },
-    )
-
-  return 'accepted'
+  const json = (await response.json()) as { status?: AcceptInvitationResult }
+  return json.status ?? 'invalid'
 }
