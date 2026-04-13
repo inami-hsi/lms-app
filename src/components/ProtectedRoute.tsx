@@ -9,7 +9,7 @@ type ProtectedRouteProps = {
 }
 
 export const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps) => {
-  const { user, loading } = useAuth()
+  const { user, loading, accessAllowed } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -17,6 +17,10 @@ export const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRout
   }
 
   if (!user) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
+  if (!accessAllowed) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 

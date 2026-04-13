@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '../auth/AuthContext'
 import { acceptInvitationToken, getInvitationInfoByToken } from '../data/lmsRepository'
@@ -13,10 +13,9 @@ const statusMessage: Record<string, string> = {
 }
 
 export const InviteAcceptPage = () => {
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') ?? ''
-  const { user, signInWithGoogle, signInDemo } = useAuth()
+  const { user, accessAllowed, signInWithGoogle, signInDemo } = useAuth()
   const [loading, setLoading] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [result, setResult] = useState<string>('')
@@ -47,7 +46,8 @@ export const InviteAcceptPage = () => {
 
     if (status === 'accepted') {
       setTimeout(() => {
-        navigate('/', { replace: true })
+        // Full reload so AuthContext re-checks allowed_emails and protected routes work immediately.
+        window.location.assign('/')
       }, 1000)
     }
   }
@@ -88,6 +88,11 @@ export const InviteAcceptPage = () => {
 
         {user && <p className="muted">ログイン中: {user.email}</p>}
         {authError && <p className="alert error">{authError}</p>}
+        {user && !accessAllowed && !result && (
+          <p className="alert warning">
+            このメールアドレスはまだアクセス許可されていません。下の「この招待を受諾する」を押してください。
+          </p>
+        )}
 
         <button
           type="button"

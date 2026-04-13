@@ -9,6 +9,7 @@ import type { AuthUser, UserRole } from '../types/lms'
 
 type AuthContextValue = {
   user: AuthUser | null
+  accessAllowed: boolean
   loading: boolean
   authError: string | null
   signInWithGoogle: () => Promise<void>
@@ -89,6 +90,7 @@ const getStoredSessionFallback = (): Session | null => {
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AuthUser | null>(null)
+  const [accessAllowed, setAccessAllowed] = useState(false)
   const [loading, setLoading] = useState(true)
   const [authError, setAuthError] = useState<string | null>(null)
 
@@ -96,24 +98,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const mapped = sessionToUser(session)
     if (!mapped) {
       setUser(null)
+      setAccessAllowed(false)
       return
     }
 
     const role = await getRoleFromProfile(mapped.id, mapped.email)
 
-    if (role !== 'admin') {
-      const allowed = await isEmailAllowed(mapped.email)
-      if (!allowed) {
-        if (supabase) {
-          await supabase.auth.signOut()
-        }
-        setUser(null)
-        setAuthError('このメールアドレスはアクセス許可されていません。管理者からの招待リンクを確認してください。')
-        return
-      }
+    if (role === 'admin') {
+      setAuthError(null)
+      setAccessAllowed(true)
+      setUser({ ...mapped, role })
+      return
+    }
+
+    const allowed = await isEmailAllowed(mapped.email)
+    if (!allowed) {
+      // Keep the session so invite acceptance can proceed, but block protected routes.
+      setAccessAllowed(false)
+      setUser({ ...mapped, role })
+      setAuthError('このメールアドレスはアクセス許可されていません。管理者からの招待リンクを確認してください。')
+      return
     }
 
     setAuthError(null)
+    setAccessAllowed(true)
     setUser({ ...mapped, role })
   }
 
@@ -208,6 +216,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signInDemo = (role: UserRole) => {
     setAuthError(null)
+    setAccessAllowed(true)
     setUser({
       id: role === 'admin' ? 'demo-admin' : 'demo-learner',
       email: role === 'admin' ? 'owner@admin.local' : 'learner@example.com',
@@ -221,11 +230,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await supabase.auth.signOut()
     }
     setUser(null)
+    setAccessAllowed(false)
   }
 
   const value = useMemo(
-    () => ({ user, loading, authError, signInWithGoogle, signInDemo, signOut }),
-    [authError, loading, user],
+    () => ({ user, accessAllowed, loading, authError, signInWithGoogle, signInDemo, signOut }),
+    [accessAllowed, authError, loading, user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
