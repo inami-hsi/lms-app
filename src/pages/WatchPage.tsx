@@ -132,7 +132,7 @@ export const WatchPage = () => {
         events: {
           onReady: (event) => {
             if (initialSeekRef.current > 0) {
-              event.target.seekTo(initialSeekRef.current, true)
+              event.target.seekTo?.(initialSeekRef.current, true)
             }
           },
           onStateChange: (event) => {
