@@ -35,8 +35,34 @@ type DbInvitation = {
   token: string
 }
 
-const getCorsOrigin = (req: Request) => {
-  const origin = req.headers.get('origin')
+const getHeader = (req: any, name: string) => {
+  const lower = name.toLowerCase()
+  const headers = req?.headers ?? {}
+
+  if (typeof headers?.get === 'function') {
+    const value = headers.get(lower)
+    return typeof value === 'string' ? value : null
+  }
+
+  const raw = headers[lower] ?? headers[name] ?? headers[name.toUpperCase()]
+  if (Array.isArray(raw)) return typeof raw[0] === 'string' ? raw[0] : null
+  return typeof raw === 'string' ? raw : null
+}
+
+const toRequestUrl = (req: any) => {
+  if (typeof req?.url === 'string' && /^https?:\/\//.test(req.url)) {
+    return new URL(req.url)
+  }
+
+  // Vercel Node runtime: req.url is a path like "/api/..", so we reconstruct it.
+  const proto = getHeader(req, 'x-forwarded-proto') ?? 'https'
+  const host = getHeader(req, 'x-forwarded-host') ?? getHeader(req, 'host') ?? 'localhost'
+  const path = typeof req?.url === 'string' ? req.url : '/'
+  return new URL(`${proto}://${host}${path}`)
+}
+
+const getCorsOrigin = (req: any) => {
+  const origin = getHeader(req, 'origin')
   if (!origin) return null
 
   const allowed = new Set([
@@ -48,7 +74,7 @@ const getCorsOrigin = (req: Request) => {
   return allowed.has(origin) ? origin : null
 }
 
-const buildCorsHeaders = (req: Request) => {
+const buildCorsHeaders = (req: any) => {
   const origin = getCorsOrigin(req)
   if (!origin) return {}
 
@@ -60,11 +86,23 @@ const buildCorsHeaders = (req: Request) => {
   } as Record<string, string>
 }
 
-const json = (req: Request, status: number, body: Record<string, unknown>) =>
-  new Response(JSON.stringify(body), {
+const json = (req: any, status: number, body: Record<string, unknown>, res?: any) => {
+  const corsHeaders = buildCorsHeaders(req)
+
+  if (res && typeof res.status === 'function') {
+    res.status(status)
+    res.setHeader('Cache-Control', 'no-store')
+    for (const [key, value] of Object.entries(corsHeaders)) {
+      res.setHeader(key, value)
+    }
+    return res.json(body)
+  }
+
+  return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json', ...buildCorsHeaders(req) },
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders },
   })
+}
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -78,7 +116,7 @@ const createInviteLink = (token: string, req: Request) => {
     return `${appBaseUrl.replace(/\/$/, '')}/invite/accept?token=${token}`
   }
 
-  const origin = req.headers.get('origin') ?? new URL(req.url).origin
+  const origin = getHeader(req, 'origin') ?? toRequestUrl(req).origin
   return `${origin}/invite/accept?token=${token}`
 }
 
@@ -175,7 +213,7 @@ const logInviteEmail = async (params: {
   })
 }
 
-const toInvitation = (row: DbInvitation, req: Request): InvitationResponse => ({
+const toInvitation = (row: DbInvitation, req: any): InvitationResponse => ({
   id: row.id,
   email: row.email,
   invitedBy: row.invited_by,
@@ -185,8 +223,8 @@ const toInvitation = (row: DbInvitation, req: Request): InvitationResponse => ({
   inviteLink: createInviteLink(row.token, req),
 })
 
-const getBearerToken = (req: Request) => {
-  const authHeader = req.headers.get('authorization')
+const getBearerToken = (req: any) => {
+  const authHeader = getHeader(req, 'authorization')
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null
   }
@@ -194,14 +232,14 @@ const getBearerToken = (req: Request) => {
   return authHeader.slice(7)
 }
 
-const getSourceIp = (req: Request) => {
-  const forwarded = req.headers.get('x-forwarded-for')
+const getSourceIp = (req: any) => {
+  const forwarded = getHeader(req, 'x-forwarded-for')
   if (forwarded) {
     const firstIp = forwarded.split(',')[0]?.trim()
     if (firstIp) return firstIp
   }
 
-  return req.headers.get('x-real-ip') ?? 'unknown'
+  return getHeader(req, 'x-real-ip') ?? 'unknown'
 }
 
 const countRecentLogs = async (params: {
@@ -298,7 +336,7 @@ const checkRateLimit = async (params: {
   return { allowed: true as const }
 }
 
-const ensureAdmin = async (req: Request) => {
+const ensureAdmin = async (req: any) => {
   const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
   const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -341,25 +379,59 @@ const ensureAdmin = async (req: Request) => {
   }
 }
 
-export default async function handler(req: Request) {
+const readJsonBody = async (req: any): Promise<RequestBody> => {
+  if (typeof req?.json === 'function') {
+    return (await req.json()) as RequestBody
+  }
+
+  if (req?.body != null) {
+    if (typeof req.body === 'string') {
+      return JSON.parse(req.body) as RequestBody
+    }
+    return req.body as RequestBody
+  }
+
+  // Fallback for Node streams (should be rare on Vercel, but keeps us safe).
+  const raw = await new Promise<string>((resolve, reject) => {
+    let data = ''
+    req.on?.('data', (chunk: Buffer | string) => {
+      data += chunk instanceof Buffer ? chunk.toString('utf-8') : String(chunk)
+    })
+    req.on?.('end', () => resolve(data))
+    req.on?.('error', reject)
+  })
+
+  if (!raw.trim()) return {}
+  return JSON.parse(raw) as RequestBody
+}
+
+export default async function handler(req: any, res?: any) {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: buildCorsHeaders(req) })
+    const corsHeaders = buildCorsHeaders(req)
+    if (res && typeof res.status === 'function') {
+      res.status(204)
+      for (const [key, value] of Object.entries(corsHeaders)) {
+        res.setHeader(key, value)
+      }
+      return res.end()
+    }
+    return new Response(null, { status: 204, headers: corsHeaders })
   }
 
   if (req.method !== 'POST') {
-    return json(req, 405, { error: 'Method not allowed' })
+    return json(req, 405, { error: 'Method not allowed' }, res)
   }
 
   let body: RequestBody
   try {
-    body = (await req.json()) as RequestBody
+    body = await readJsonBody(req)
   } catch {
-    return json(req, 400, { error: 'Invalid JSON body.' })
+    return json(req, 400, { error: 'Invalid JSON body.' }, res)
   }
 
   const authResult = await ensureAdmin(req)
   if (!authResult.ok) {
-    return json(req, authResult.status, { error: authResult.error })
+    return json(req, authResult.status, { error: authResult.error }, res)
   }
 
   const { adminClient, userId } = authResult
@@ -374,16 +446,21 @@ export default async function handler(req: Request) {
     })
 
     if (!rateResult.allowed) {
-      return json(req, 429, {
-        error: rateResult.error,
-        retryAfterSec: RATE_LIMIT_WINDOW_SEC,
-      })
+      return json(
+        req,
+        429,
+        {
+          error: rateResult.error,
+          retryAfterSec: RATE_LIMIT_WINDOW_SEC,
+        },
+        res,
+      )
     }
   }
 
   if (body.action === 'create') {
     if (!body.email) {
-      return json(req, 400, { error: 'email is required for create.' })
+      return json(req, 400, { error: 'email is required for create.' }, res)
     }
 
     const token = crypto.randomUUID()
@@ -402,7 +479,7 @@ export default async function handler(req: Request) {
       .single()
 
     if (error || !data) {
-      return json(req, 500, { error: 'Failed to create invitation.' })
+      return json(req, 500, { error: 'Failed to create invitation.' }, res)
     }
 
     const invitation = toInvitation(data as DbInvitation, req)
@@ -427,12 +504,12 @@ export default async function handler(req: Request) {
       invitation.notificationError = notify.error
     }
 
-    return json(req, 200, { invitation })
+    return json(req, 200, { invitation }, res)
   }
 
   if (body.action === 'resend') {
     if (!body.invitationId) {
-      return json(req, 400, { error: 'invitationId is required for resend.' })
+      return json(req, 400, { error: 'invitationId is required for resend.' }, res)
     }
 
     const token = crypto.randomUUID()
@@ -446,7 +523,7 @@ export default async function handler(req: Request) {
       .single()
 
     if (error || !data) {
-      return json(req, 500, { error: 'Failed to resend invitation.' })
+      return json(req, 500, { error: 'Failed to resend invitation.' }, res)
     }
 
     const invitation = toInvitation(data as DbInvitation, req)
@@ -471,12 +548,12 @@ export default async function handler(req: Request) {
       invitation.notificationError = notify.error
     }
 
-    return json(req, 200, { invitation })
+    return json(req, 200, { invitation }, res)
   }
 
   if (body.action === 'revoke') {
     if (!body.invitationId || !body.email) {
-      return json(req, 400, { error: 'invitationId and email are required for revoke.' })
+      return json(req, 400, { error: 'invitationId and email are required for revoke.' }, res)
     }
 
     const { data, error } = await adminClient
@@ -487,13 +564,13 @@ export default async function handler(req: Request) {
       .single()
 
     if (error || !data) {
-      return json(req, 500, { error: 'Failed to revoke invitation.' })
+      return json(req, 500, { error: 'Failed to revoke invitation.' }, res)
     }
 
     await adminClient.from('allowed_emails').delete().eq('email', body.email)
 
-    return json(req, 200, { invitation: toInvitation(data as DbInvitation, req) })
+    return json(req, 200, { invitation: toInvitation(data as DbInvitation, req) }, res)
   }
 
-  return json(req, 400, { error: 'Unsupported action.' })
+  return json(req, 400, { error: 'Unsupported action.' }, res)
 }
