@@ -42,3 +42,13 @@
   - フィルタ（期間 / 種別 / 結果 / 検索 / 並び順）で `admin-logs` のクエリが更新されることを確認
   - ページング（`cursor`）: `OPTIONS 204` → `GET 200`、`50 → 100 → 122`、重複なし
   - CSV: 招待メール送信ログ / 招待APIレート制限ログ ともに出力できることを確認
+
+## 2026-04-13
+- 管理者ログの残課題対応
+  - Supabase: ページング境界（同一 `created_at`）検証用テストデータ投入 → `sort=asc/desc` + `cursor` の重複/欠落がないことを確認 → テストデータ削除
+  - Supabase: ログ用インデックス作成（`invite_email_logs` / `invite_api_request_logs`）
+- リポジトリ整備
+  - `.env.production` / `dist.zip` を Git 管理から除外（`.gitignore` 追記 + `git rm --cached`）
+- 静的チェック/ビルド確認
+  - `npm run lint` のエラーを解消（警告は残り）
+  - `npm run build` のエラーを解消（WatchPage の `seekTo` optional 呼び出し対応）
