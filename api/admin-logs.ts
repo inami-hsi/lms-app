@@ -114,6 +114,10 @@ const encodeCursor = (createdAt: string, id: string) => {
   return toBase64(JSON.stringify({ createdAt, id }))
 }
 
+type CursorClause =
+  | { kind: 'or'; value: string }
+  | { kind: 'gt' | 'lt'; column: 'created_at'; value: string }
+
 /**
  * Cursor is a base64 JSON string: {"createdAt":"<ISO8601>","id":"<string>"}
  * - createdAt: ISO8601 timestamp (UTC)
@@ -144,6 +148,23 @@ const parseCursor = (value: string | null) => {
     if (Number.isNaN(millis)) return null
     return { createdAt: new Date(millis).toISOString(), id: null } as ParsedCursor
   }
+}
+
+const buildCursorClause = (sort: SortOrder, cursor: ParsedCursor): CursorClause => {
+  if (cursor.id) {
+    if (sort === 'asc') {
+      return {
+        kind: 'or',
+        value: `created_at.gt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.gt.${cursor.id})`,
+      }
+    }
+    return {
+      kind: 'or',
+      value: `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`,
+    }
+  }
+
+  return { kind: sort === 'asc' ? 'gt' : 'lt', column: 'created_at', value: cursor.createdAt }
 }
 
 const ensureAdmin = async (req: any) => {
@@ -233,17 +254,10 @@ const fetchEmailLogs = async (req: any, adminClient: ReturnType<typeof createCli
   }
 
   if (cursor) {
-    if (cursor.id) {
-      if (sort === 'asc') {
-        query = query.or(`created_at.gt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.gt.${cursor.id})`)
-      } else {
-        query = query.or(`created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`)
-      }
-    } else if (sort === 'asc') {
-      query = query.gt('created_at', cursor.createdAt)
-    } else {
-      query = query.lt('created_at', cursor.createdAt)
-    }
+    const clause = buildCursorClause(sort, cursor)
+    if (clause.kind === 'or') query = query.or(clause.value)
+    if (clause.kind === 'gt') query = query.gt(clause.column, clause.value)
+    if (clause.kind === 'lt') query = query.lt(clause.column, clause.value)
   }
 
   const { data, error, count } = await query
@@ -303,17 +317,10 @@ const fetchApiLogs = async (req: any, adminClient: ReturnType<typeof createClien
   }
 
   if (cursor) {
-    if (cursor.id) {
-      if (sort === 'asc') {
-        query = query.or(`created_at.gt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.gt.${cursor.id})`)
-      } else {
-        query = query.or(`created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`)
-      }
-    } else if (sort === 'asc') {
-      query = query.gt('created_at', cursor.createdAt)
-    } else {
-      query = query.lt('created_at', cursor.createdAt)
-    }
+    const clause = buildCursorClause(sort, cursor)
+    if (clause.kind === 'or') query = query.or(clause.value)
+    if (clause.kind === 'gt') query = query.gt(clause.column, clause.value)
+    if (clause.kind === 'lt') query = query.lt(clause.column, clause.value)
   }
 
   const { data, error, count } = await query
@@ -362,4 +369,12 @@ export default async function handler(req: any, res?: any) {
   }
 
   return json(req, 400, { error: 'Unsupported log type.' }, res)
+}
+
+// Test helpers (do not use in production code)
+export const __test__ = {
+  parseCursor,
+  encodeCursor,
+  parseSortOrder,
+  buildCursorClause,
 }
