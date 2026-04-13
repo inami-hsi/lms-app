@@ -182,6 +182,9 @@ Run this checklist on `https://lms.ai-nagoya.com`:
 3. Reissue (admin) → accept again (learner) → learner can sign in and admin sees `accepted`.
 4. Logs: `招待メール送信ログ` and `招待APIレート制限ログ` increase under `24時間`.
 
+## Ops / DR
+- Disaster recovery runbook: `ops/DR_RUNBOOK.md`
+
 ### Resend Domain Verification (High Level)
 To reliably send to external recipients, verify the sender domain in Resend:
 - Add domain (e.g. `ai-nagoya.com`) in Resend → Domains.
