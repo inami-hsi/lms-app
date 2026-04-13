@@ -222,7 +222,7 @@ const logInviteEmail = async (params: {
   attempts: number
   triggeredBy: string
 }) => {
-  await params.adminClient.from('invite_email_logs').insert({
+  const baseRow = {
     invitation_id: params.invitationId,
     email: params.email,
     action: params.action,
@@ -230,7 +230,41 @@ const logInviteEmail = async (params: {
     error_detail: params.errorDetail ?? null,
     attempts: params.attempts,
     triggered_by: params.triggeredBy,
-  })
+    created_at: new Date().toISOString(),
+  }
+
+  // The table schema may differ between environments; try a couple of fallbacks so we still keep an audit trail.
+  const tries: Array<Record<string, unknown>> = [
+    baseRow,
+    // Older schema fallback (no triggered_by / invitation_id).
+    {
+      invitation_id: params.invitationId,
+      email: params.email,
+      action: params.action,
+      status: params.status,
+      error_detail: params.errorDetail ?? null,
+      attempts: params.attempts,
+      created_at: baseRow.created_at,
+    },
+    {
+      email: params.email,
+      action: params.action,
+      status: params.status,
+      error_detail: params.errorDetail ?? null,
+      attempts: params.attempts,
+      created_at: baseRow.created_at,
+    },
+  ]
+
+  for (const row of tries) {
+    const { error } = await params.adminClient.from('invite_email_logs').insert(row)
+    if (!error) return { ok: true as const }
+    // Keep the last error, but don't throw; email sending itself should not be blocked by logging failures.
+    // eslint-disable-next-line no-console
+    console.error('logInviteEmail insert failed', error)
+  }
+
+  return { ok: false as const }
 }
 
 const toInvitation = (row: DbInvitation, req: any): InvitationResponse => ({
@@ -509,7 +543,7 @@ export default async function handler(req: any, res?: any) {
       expiresAt: invitation.expiresAt,
     })
 
-    await logInviteEmail({
+    const emailLogResult = await logInviteEmail({
       adminClient,
       invitationId: invitation.id,
       email: invitation.email,
@@ -522,6 +556,8 @@ export default async function handler(req: any, res?: any) {
 
     if (!notify.ok) {
       invitation.notificationError = notify.error
+    } else if (!emailLogResult.ok) {
+      invitation.notificationError = '招待ログの記録に失敗しました。管理者に連絡してください。'
     }
 
     return json(req, 200, { invitation }, res)
@@ -553,7 +589,7 @@ export default async function handler(req: any, res?: any) {
       expiresAt: invitation.expiresAt,
     })
 
-    await logInviteEmail({
+    const emailLogResult = await logInviteEmail({
       adminClient,
       invitationId: invitation.id,
       email: invitation.email,
@@ -566,6 +602,8 @@ export default async function handler(req: any, res?: any) {
 
     if (!notify.ok) {
       invitation.notificationError = notify.error
+    } else if (!emailLogResult.ok) {
+      invitation.notificationError = '招待ログの記録に失敗しました。管理者に連絡してください。'
     }
 
     return json(req, 200, { invitation }, res)
