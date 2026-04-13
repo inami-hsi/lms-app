@@ -36,19 +36,25 @@ export const InviteAcceptPage = () => {
   const handleAccept = async () => {
     if (!user || !token) return
     setLoading(true)
-    const status = await acceptInvitationToken({
-      token,
-      userEmail: user.email,
-      userId: user.id,
-    })
-    setResult(status)
-    setLoading(false)
 
-    if (status === 'accepted') {
-      setTimeout(() => {
-        // Full reload so AuthContext re-checks allowed_emails and protected routes work immediately.
-        window.location.assign('/')
-      }, 1000)
+    try {
+      const status = await acceptInvitationToken({
+        token,
+        userEmail: user.email,
+        userId: user.id,
+      })
+      setResult(status)
+
+      if (status === 'accepted') {
+        setTimeout(() => {
+          // Full reload so AuthContext re-checks allowed_emails and protected routes work immediately.
+          window.location.assign('/')
+        }, 1000)
+      }
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : '招待受諾に失敗しました。')
+    } finally {
+      setLoading(false)
     }
   }
 

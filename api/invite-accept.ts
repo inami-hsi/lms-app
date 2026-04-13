@@ -6,8 +6,32 @@ type RequestBody = {
   token?: string
 }
 
-const getCorsOrigin = (req: Request) => {
-  const origin = req.headers.get('origin')
+const getHeader = (req: any, name: string) => {
+  const lower = name.toLowerCase()
+  const headers = req?.headers ?? {}
+
+  if (typeof headers?.get === 'function') {
+    const value = headers.get(lower)
+    return typeof value === 'string' ? value : null
+  }
+
+  const raw = headers[lower] ?? headers[name] ?? headers[name.toUpperCase()]
+  if (Array.isArray(raw)) return typeof raw[0] === 'string' ? raw[0] : null
+  return typeof raw === 'string' ? raw : null
+}
+
+const toRequestUrl = (req: any) => {
+  if (typeof req?.url === 'string' && /^https?:\/\//.test(req.url)) {
+    return new URL(req.url)
+  }
+  const proto = getHeader(req, 'x-forwarded-proto') ?? 'https'
+  const host = getHeader(req, 'x-forwarded-host') ?? getHeader(req, 'host') ?? 'localhost'
+  const path = typeof req?.url === 'string' ? req.url : '/'
+  return new URL(`${proto}://${host}${path}`)
+}
+
+const getCorsOrigin = (req: any) => {
+  const origin = getHeader(req, 'origin')
   if (!origin) return null
 
   const allowed = new Set([
@@ -19,7 +43,7 @@ const getCorsOrigin = (req: Request) => {
   return allowed.has(origin) ? origin : null
 }
 
-const buildCorsHeaders = (req: Request) => {
+const buildCorsHeaders = (req: any) => {
   const origin = getCorsOrigin(req)
   if (!origin) return {}
 
@@ -31,55 +55,99 @@ const buildCorsHeaders = (req: Request) => {
   } as Record<string, string>
 }
 
-const json = (req: Request, status: number, body: Record<string, unknown>) =>
-  new Response(JSON.stringify(body), {
+const json = (req: any, status: number, body: Record<string, unknown>, res?: any) => {
+  const corsHeaders = buildCorsHeaders(req)
+  if (res && typeof res.status === 'function') {
+    res.status(status)
+    res.setHeader('Cache-Control', 'no-store')
+    for (const [key, value] of Object.entries(corsHeaders)) {
+      res.setHeader(key, value)
+    }
+    return res.json(body)
+  }
+
+  return new Response(JSON.stringify(body), {
     status,
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-store',
-      ...buildCorsHeaders(req),
+      ...corsHeaders,
     },
   })
+}
 
-const getBearerToken = (req: Request) => {
-  const authHeader = req.headers.get('authorization')
+const getBearerToken = (req: any) => {
+  const authHeader = getHeader(req, 'authorization')
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null
   return authHeader.slice(7)
 }
 
 const isExpired = (expiresAt: string) => new Date(expiresAt).getTime() < Date.now()
 
-export default async function handler(req: Request) {
+export default async function handler(req: any, res?: any) {
+  // Vercel uses Node runtime for these serverless functions.
+  return handlerNodeCompat(req, res)
+}
+
+const readJsonBody = async (req: any): Promise<RequestBody> => {
+  if (typeof req?.json === 'function') {
+    return (await req.json()) as RequestBody
+  }
+
+  if (req?.body != null) {
+    if (typeof req.body === 'string') return JSON.parse(req.body) as RequestBody
+    return req.body as RequestBody
+  }
+
+  const raw = await new Promise<string>((resolve, reject) => {
+    let data = ''
+    req.on?.('data', (chunk: Buffer | string) => {
+      data += chunk instanceof Buffer ? chunk.toString('utf-8') : String(chunk)
+    })
+    req.on?.('end', () => resolve(data))
+    req.on?.('error', reject)
+  })
+  if (!raw.trim()) return {}
+  return JSON.parse(raw) as RequestBody
+}
+
+async function handlerNodeCompat(req: any, res?: any) {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: buildCorsHeaders(req) })
+    const corsHeaders = buildCorsHeaders(req)
+    if (res && typeof res.status === 'function') {
+      res.status(204)
+      for (const [key, value] of Object.entries(corsHeaders)) res.setHeader(key, value)
+      return res.end()
+    }
+    return new Response(null, { status: 204, headers: corsHeaders })
   }
 
   if (req.method !== 'POST') {
-    return json(req, 405, { error: 'Method not allowed' })
+    return json(req, 405, { error: 'Method not allowed' }, res)
   }
 
   const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
   const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
-    return json(req, 500, { error: 'Supabase server env is not configured.' })
+    return json(req, 500, { error: 'Supabase server env is not configured.' }, res)
   }
 
   const token = getBearerToken(req)
   if (!token) {
-    return json(req, 401, { error: 'Missing bearer token.' })
+    return json(req, 401, { error: 'Missing bearer token.' }, res)
   }
 
   let body: RequestBody
   try {
-    body = (await req.json()) as RequestBody
+    body = await readJsonBody(req)
   } catch {
-    return json(req, 400, { error: 'Invalid JSON body.' })
+    return json(req, 400, { error: 'Invalid JSON body.' }, res)
   }
 
   const inviteToken = (body.token ?? '').trim()
   if (!inviteToken) {
-    return json(req, 400, { error: 'token is required.' })
+    return json(req, 400, { error: 'token is required.' }, res)
   }
 
   const authClient = createClient(supabaseUrl, supabaseAnonKey)
@@ -87,7 +155,7 @@ export default async function handler(req: Request) {
 
   const { data: userData, error: userError } = await authClient.auth.getUser(token)
   if (userError || !userData?.user?.email) {
-    return json(req, 401, { error: 'Invalid user session.' })
+    return json(req, 401, { error: 'Invalid user session.' }, res)
   }
 
   const userId = userData.user.id
@@ -100,20 +168,20 @@ export default async function handler(req: Request) {
     .maybeSingle()
 
   if (inviteError || !invitation) {
-    return json(req, 200, { status: 'invalid' satisfies AcceptInvitationResult })
+    return json(req, 200, { status: 'invalid' satisfies AcceptInvitationResult }, res)
   }
 
   if (invitation.status !== 'pending') {
-    return json(req, 200, { status: 'already-used' satisfies AcceptInvitationResult })
+    return json(req, 200, { status: 'already-used' satisfies AcceptInvitationResult }, res)
   }
 
   if (isExpired(invitation.expires_at)) {
     await adminClient.from('invitations').update({ status: 'expired' }).eq('id', invitation.id)
-    return json(req, 200, { status: 'expired' satisfies AcceptInvitationResult })
+    return json(req, 200, { status: 'expired' satisfies AcceptInvitationResult }, res)
   }
 
   if (String(invitation.email).toLowerCase() !== userEmail.toLowerCase()) {
-    return json(req, 200, { status: 'email-mismatch' satisfies AcceptInvitationResult })
+    return json(req, 200, { status: 'email-mismatch' satisfies AcceptInvitationResult }, res)
   }
 
   const acceptedAt = new Date().toISOString()
@@ -123,7 +191,7 @@ export default async function handler(req: Request) {
     .eq('id', invitation.id)
 
   if (updateError) {
-    return json(req, 500, { error: 'Failed to accept invitation.' })
+    return json(req, 500, { error: 'Failed to accept invitation.' }, res)
   }
 
   await adminClient.from('allowed_emails').upsert(
@@ -150,6 +218,5 @@ export default async function handler(req: Request) {
     )
   }
 
-  return json(req, 200, { status: 'accepted' satisfies AcceptInvitationResult })
+  return json(req, 200, { status: 'accepted' satisfies AcceptInvitationResult }, res)
 }
-

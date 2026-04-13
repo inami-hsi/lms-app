@@ -879,14 +879,30 @@ export const acceptInvitationToken = async (payload: {
     throw new Error('セッションが取得できません。再ログインしてください。')
   }
 
-  const response = await fetch(buildApiUrl('/api/invite-accept'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ token: payload.token }),
-  })
+  const controller = new AbortController()
+  const timeoutMs = 15000
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
+
+  let response: Response
+  try {
+    response = await fetch(buildApiUrl('/api/invite-accept'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ token: payload.token }),
+      signal: controller.signal,
+    })
+  } catch (error) {
+    const message =
+      error instanceof DOMException && error.name === 'AbortError'
+        ? '通信がタイムアウトしました。電波状況を確認して再試行してください。'
+        : '通信に失敗しました。時間をおいて再試行してください。'
+    throw new Error(message)
+  } finally {
+    window.clearTimeout(timeout)
+  }
 
   if (!response.ok) {
     let message = '招待受諾に失敗しました。'
