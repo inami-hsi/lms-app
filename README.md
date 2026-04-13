@@ -173,7 +173,7 @@ Invitation email (Resend):
 ### UI/Behavior
 - Invitation link: `/invite/accept?token=...`.
 - After a user accepts an invitation, the same token becomes `already-used`.
-- `revoked` invitations cannot be resent (button disabled).
+- `revoked` invitations cannot be resent, but can be reissued (regenerates token and returns to `pending`).
 
 ### Resend Domain Verification (High Level)
 To reliably send to external recipients, verify the sender domain in Resend:

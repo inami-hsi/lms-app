@@ -665,6 +665,26 @@ export const AdminUsersPage = () => {
     }
   }
 
+  const handleReissue = async (invitation: Invitation) => {
+    try {
+      const updated = await resendInvitation(invitation.id)
+      setInvitations((current) => current.map((item) => (item.id === invitation.id ? updated : item)))
+      await loadLogs()
+      if (updated.notificationError) {
+        setMessage(`${invitation.email} の再発行は完了しましたが、通知送信に失敗しました: ${updated.notificationError}`)
+        return
+      }
+
+      setMessage(`${invitation.email} の招待を再発行しました。`)
+    } catch (error) {
+      const retryAfterSec = getRetryAfterSecFromError(error)
+      if (retryAfterSec) {
+        setCooldownSeconds(retryAfterSec)
+      }
+      setMessage(error instanceof Error ? error.message : '招待の再発行に失敗しました。')
+    }
+  }
+
   const handleRevoke = async (invitation: Invitation) => {
     try {
       const updated = await revokeInvitation(invitation.id, invitation.email)
@@ -844,6 +864,16 @@ export const AdminUsersPage = () => {
               )}
               {invitation.notificationError && <p className="invite-notify-error">通知失敗: {invitation.notificationError}</p>}
               <div className="row-actions">
+                {invitation.status === 'revoked' && (
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={() => void handleReissue(invitation)}
+                    disabled={cooldownSeconds > 0}
+                  >
+                    再発行
+                  </button>
+                )}
                 <button
                   type="button"
                   className="button secondary"
