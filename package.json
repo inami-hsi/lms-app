@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:cursor": "node --test scripts/admin-logs-cursor.test.mjs"
+    "test:cursor": "node --test scripts/admin-logs-cursor.test.mjs",
+    "test:invite": "node --test scripts/invite-accept-logic.test.mjs",
+    "test": "npm run test:cursor && npm run test:invite"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.102.1",
