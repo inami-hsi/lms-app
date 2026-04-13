@@ -12,7 +12,7 @@ type AuthContextValue = {
   accessAllowed: boolean
   loading: boolean
   authError: string | null
-  signInWithGoogle: () => Promise<void>
+  signInWithGoogle: (redirectTo?: string) => Promise<void>
   signInDemo: (role: UserRole) => void
   signOut: () => Promise<void>
 }
@@ -188,18 +188,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [])
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (redirectTo?: string) => {
     if (!isSupabaseConfigured || !supabase) {
       throw new Error('Supabase環境変数が未設定です。VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY を設定してください。')
     }
 
     setAuthError(null)
 
+    const nextRedirectTo = redirectTo ?? window.location.origin
+
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        // Keep the full URL (path + query) so invite accept keeps `?token=...` after OAuth redirect.
-        redirectTo: window.location.href,
+        // For invitation accept we pass full URL (path + query) so it keeps `?token=...`.
+        // For normal login we default to the app origin.
+        redirectTo: nextRedirectTo,
       },
     })
 

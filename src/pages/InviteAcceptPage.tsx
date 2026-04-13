@@ -74,7 +74,7 @@ export const InviteAcceptPage = () => {
               className="button primary"
               onClick={() => {
                 setAuthError('')
-                void signInWithGoogle().catch((error) => {
+                void signInWithGoogle(window.location.href).catch((error) => {
                   setAuthError(error instanceof Error ? error.message : 'ログインに失敗しました。')
                 })
               }}
