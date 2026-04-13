@@ -187,13 +187,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     setAuthError(null)
 
-    await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         // Keep the full URL (path + query) so invite accept keeps `?token=...` after OAuth redirect.
         redirectTo: window.location.href,
       },
     })
+
+    // In some failure cases (misconfigured provider/redirect URI), Supabase returns an error without redirecting.
+    if (error) {
+      throw error
+    }
+
+    // supabase-js may auto-redirect in the browser, but explicitly navigate when a URL is returned.
+    if (data?.url) {
+      window.location.assign(data.url)
+    }
   }
 
   const signInDemo = (role: UserRole) => {

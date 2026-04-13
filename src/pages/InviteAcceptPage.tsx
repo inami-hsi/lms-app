@@ -20,6 +20,7 @@ export const InviteAcceptPage = () => {
   const [loading, setLoading] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [result, setResult] = useState<string>('')
+  const [authError, setAuthError] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -62,7 +63,16 @@ export const InviteAcceptPage = () => {
 
         {!user && (
           <>
-            <button type="button" className="button primary" onClick={() => void signInWithGoogle()}>
+            <button
+              type="button"
+              className="button primary"
+              onClick={() => {
+                setAuthError('')
+                void signInWithGoogle().catch((error) => {
+                  setAuthError(error instanceof Error ? error.message : 'ログインに失敗しました。')
+                })
+              }}
+            >
               Googleでログインして続行
             </button>
             <div className="demo-actions">
@@ -77,6 +87,7 @@ export const InviteAcceptPage = () => {
         )}
 
         {user && <p className="muted">ログイン中: {user.email}</p>}
+        {authError && <p className="alert error">{authError}</p>}
 
         <button
           type="button"
