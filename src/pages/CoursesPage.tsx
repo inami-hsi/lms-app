@@ -14,8 +14,9 @@ export const CoursesPage = () => {
   useEffect(() => {
     const load = async () => {
       setLoading(true)
-      const loadedCourses = (await listCourses()).filter((course) => course.isPublished)
-      setCourses(loadedCourses)
+      const allCourses = await listCourses()
+      const visibleCourses = user?.role === 'admin' ? allCourses : allCourses.filter((course) => course.isPublished)
+      setCourses(visibleCourses)
 
       if (!user) {
         setProgressByCourse({})
@@ -27,7 +28,7 @@ export const CoursesPage = () => {
       const progressMap: Record<string, number> = {}
 
       await Promise.all(
-        loadedCourses.map(async (course) => {
+        visibleCourses.map(async (course) => {
           const lessons = (await listLessonsByCourse(course.id)).filter((lesson) => lesson.isPublished)
           if (lessons.length === 0) {
             progressMap[course.id] = 0
@@ -48,21 +49,39 @@ export const CoursesPage = () => {
     void load()
   }, [user])
 
-  const publishedCourses = useMemo(() => courses.filter((course) => course.isPublished), [courses])
+  const visibleCourses = useMemo(
+    () => (user?.role === 'admin' ? courses : courses.filter((course) => course.isPublished)),
+    [courses, user?.role],
+  )
 
   return (
     <section>
       <h1>コース一覧</h1>
       <p className="muted">受講可能なコースと進捗を確認できます。</p>
       {loading && <p className="muted">読み込み中...</p>}
+      {!loading && visibleCourses.length === 0 && (
+        <div className="empty-state">
+          <p className="muted">公開中のコースがありません。</p>
+          {user?.role === 'admin' && (
+            <p className="muted">
+              管理者は <Link to="/admin/courses">コース管理</Link> でコース/レッスンを作成して公開してください。
+            </p>
+          )}
+        </div>
+      )}
       <div className="card-grid">
-        {publishedCourses.map((course) => {
+        {visibleCourses.map((course) => {
             const progress = progressByCourse[course.id] ?? 0
             return (
               <article key={course.id} className="card">
                 <img src={course.thumbnailUrl} alt={course.title} className="card-image" />
                 <h2>{course.title}</h2>
                 <p>{course.description}</p>
+                {user?.role === 'admin' && (
+                  <span className={`badge ${course.isPublished ? 'success' : 'warning'}`}>
+                    {course.isPublished ? '公開中' : '下書き'}
+                  </span>
+                )}
                 <div className="progress-track">
                   <div className="progress-fill" style={{ width: `${progress}%` }} />
                 </div>

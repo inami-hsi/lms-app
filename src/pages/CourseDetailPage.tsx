@@ -21,7 +21,8 @@ export const CourseDetailPage = () => {
       }
 
       const courses = await listCourses()
-      const found = courses.find((item) => item.id === id && item.isPublished) ?? null
+      const found =
+        courses.find((item) => item.id === id && (user?.role === 'admin' || item.isPublished)) ?? null
       setCourse(found)
 
       if (!found) {
@@ -30,7 +31,7 @@ export const CourseDetailPage = () => {
       }
 
       const loadedLessons = await listLessonsByCourse(found.id)
-      setLessons(loadedLessons)
+      setLessons(user?.role === 'admin' ? loadedLessons : loadedLessons.filter((lesson) => lesson.isPublished))
 
       if (user) {
         setProgress(await listProgressByUser(user.id))
@@ -64,6 +65,11 @@ export const CourseDetailPage = () => {
             <div key={lesson.id} className="row">
               <div>
                 <h3>{lesson.order}. {lesson.title}</h3>
+                {user?.role === 'admin' && (
+                  <span className={`badge ${lesson.isPublished ? 'success' : 'warning'}`}>
+                    {lesson.isPublished ? '公開中' : '下書き'}
+                  </span>
+                )}
                 <span className={`badge ${completed ? 'success' : 'warning'}`}>
                   {completed ? '完了' : '未完了'}
                 </span>

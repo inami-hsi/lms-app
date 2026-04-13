@@ -452,6 +452,25 @@ export const listCourses = async () => {
   return (data as DbCourse[]).map(toCourse)
 }
 
+export const setCoursePublished = async (courseId: string, isPublished: boolean) => {
+  if (!isSupabaseConfigured || !supabase) {
+    const course = demoCourses.find((item) => item.id === courseId)
+    if (!course) throw new Error('コースが見つかりません')
+    course.isPublished = isPublished
+    return course
+  }
+
+  const { data, error } = await supabase
+    .from('courses')
+    .update({ is_published: isPublished })
+    .eq('id', courseId)
+    .select('id, title, description, thumbnail_url, is_published')
+    .single()
+
+  if (error) throw error
+  return toCourse(data as DbCourse)
+}
+
 export const createCourse = async (input: { title: string; description: string }) => {
   if (!isSupabaseConfigured || !supabase) {
     const course: Course = {
@@ -493,6 +512,62 @@ export const listLessonsByCourse = async (courseId: string) => {
 
   if (error) throw error
   return (data as DbLesson[]).map(toLesson)
+}
+
+export const createLesson = async (input: { courseId: string; title: string; youtubeVideoId: string; order: number }) => {
+  const title = input.title.trim()
+  const youtubeVideoId = input.youtubeVideoId.trim()
+  const order = Math.max(1, Math.floor(input.order))
+
+  if (!title) throw new Error('レッスン名を入力してください')
+  if (!youtubeVideoId) throw new Error('YouTube動画IDを入力してください')
+
+  if (!isSupabaseConfigured || !supabase) {
+    const lesson: Lesson = {
+      id: crypto.randomUUID(),
+      courseId: input.courseId,
+      title,
+      youtubeVideoId,
+      order,
+      isPublished: false,
+    }
+    demoLessons.push(lesson)
+    return lesson
+  }
+
+  const { data, error } = await supabase
+    .from('lessons')
+    .insert({
+      course_id: input.courseId,
+      title,
+      youtube_video_id: youtubeVideoId,
+      order,
+      is_published: false,
+    })
+    .select('id, course_id, title, youtube_video_id, order, is_published')
+    .single()
+
+  if (error) throw error
+  return toLesson(data as DbLesson)
+}
+
+export const setLessonPublished = async (lessonId: string, isPublished: boolean) => {
+  if (!isSupabaseConfigured || !supabase) {
+    const lesson = demoLessons.find((item) => item.id === lessonId)
+    if (!lesson) throw new Error('レッスンが見つかりません')
+    lesson.isPublished = isPublished
+    return lesson
+  }
+
+  const { data, error } = await supabase
+    .from('lessons')
+    .update({ is_published: isPublished })
+    .eq('id', lessonId)
+    .select('id, course_id, title, youtube_video_id, order, is_published')
+    .single()
+
+  if (error) throw error
+  return toLesson(data as DbLesson)
 }
 
 export const findLesson = async (lessonId: string) => {
