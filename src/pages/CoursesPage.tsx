@@ -29,16 +29,21 @@ export const CoursesPage = () => {
 
       await Promise.all(
         visibleCourses.map(async (course) => {
-          const lessons = (await listLessonsByCourse(course.id)).filter((lesson) => lesson.isPublished)
-          if (lessons.length === 0) {
+          const lessons = await listLessonsByCourse(course.id)
+          const visibleLessons = user.role === 'admin' ? lessons : lessons.filter((lesson) => lesson.isPublished)
+          if (visibleLessons.length === 0) {
             progressMap[course.id] = 0
             return
           }
 
-          const completed = lessons.filter((lesson) =>
-            progress.some((item) => item.lessonId === lesson.id && item.isCompleted),
-          ).length
-          progressMap[course.id] = Math.round((completed / lessons.length) * 100)
+          const fractions = visibleLessons.map((lesson) => {
+            const record = progress.find((item) => item.lessonId === lesson.id)
+            if (!record) return 0
+            if (record.isCompleted) return 1
+            if (record.totalSeconds <= 0) return 0
+            return Math.max(0, Math.min(1, record.watchedSeconds / record.totalSeconds))
+          })
+          progressMap[course.id] = Math.round((fractions.reduce((sum, v) => sum + v, 0) / visibleLessons.length) * 100)
         }),
       )
 
