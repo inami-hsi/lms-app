@@ -175,6 +175,13 @@ Invitation email (Resend):
 - After a user accepts an invitation, the same token becomes `already-used`.
 - `revoked` invitations cannot be resent, but can be reissued (regenerates token and returns to `pending`).
 
+### Smoke Test (Manual)
+Run this checklist on `https://lms.ai-nagoya.com`:
+1. Create invite (admin) → accept (learner) → confirm learner can watch lessons and admin sees `accepted`.
+2. Revoke (admin) → learner cannot sign in (shows "アクセス許可されていません").
+3. Reissue (admin) → accept again (learner) → learner can sign in and admin sees `accepted`.
+4. Logs: `招待メール送信ログ` and `招待APIレート制限ログ` increase under `24時間`.
+
 ### Resend Domain Verification (High Level)
 To reliably send to external recipients, verify the sender domain in Resend:
 - Add domain (e.g. `ai-nagoya.com`) in Resend → Domains.
