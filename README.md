@@ -136,3 +136,47 @@ Then confirm in `https://lms.ai-nagoya.com/admin/users`:
 - Repeat the same for API logs.
 
 Cleanup SQL (optional) is included at the bottom of `supabase/admin_logs_testdata.sql`.
+
+## Deployment Notes
+
+### Architecture
+- Frontend: static hosting on Xserver (`https://lms.ai-nagoya.com`), built from `dist/`.
+- APIs: Vercel serverless functions (example: `https://lms-app-kappa-nine.vercel.app/api/...`).
+- DB/Auth: Supabase.
+
+### Frontend Build/Upload (Xserver)
+1. Run `npm run build` in `lms-app/`.
+2. Upload `lms-app/dist/` to Xserver (keep `.htaccess` and existing icons if needed).
+
+### Required Environment Variables
+Frontend (Vite):
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_API_BASE_URL` (Vercel base URL, no trailing slash)
+
+Vercel (Server):
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+Invitation email (Resend):
+- `RESEND_API_KEY`
+- `INVITE_FROM_EMAIL` (e.g. `LMS <noreply@ai-nagoya.com>`)
+
+## Invitation Flow Notes
+
+### Endpoints
+- `POST /api/admin-invitations` (admin only): `create` / `resend` / `revoke`
+- `GET /api/invite-token?token=...`: returns masked invitation email + status
+- `POST /api/invite-accept`: accepts invitation and adds the email to `allowed_emails`
+
+### UI/Behavior
+- Invitation link: `/invite/accept?token=...`.
+- After a user accepts an invitation, the same token becomes `already-used`.
+- `revoked` invitations cannot be resent (button disabled).
+
+### Resend Domain Verification (High Level)
+To reliably send to external recipients, verify the sender domain in Resend:
+- Add domain (e.g. `ai-nagoya.com`) in Resend → Domains.
+- Add the provided DNS records (DKIM/SPF/MX/DMARC) in Xserver DNS settings.
+- Wait until the domain is `Verified`, then set `INVITE_FROM_EMAIL` on Vercel.

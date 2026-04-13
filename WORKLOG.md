@@ -52,3 +52,24 @@
 - 静的チェック/ビルド確認
   - `npm run lint` のエラーを解消（警告は残り）
   - `npm run build` のエラーを解消（WatchPage の `seekTo` optional 呼び出し対応）
+- 招待フロー（本番 `lms.ai-nagoya.com`）を実運用できるところまで整備
+  - Resend を導入（招待メール送信）
+    - `RESEND_API_KEY` を Vercel に設定
+    - Resend 側で `ai-nagoya.com` ドメインを検証（SPF/DKIM/MX/DMARC）
+    - `INVITE_FROM_EMAIL` を `noreply@ai-nagoya.com` に変更
+  - Vercel API（CORS/Node runtime 互換）
+    - `api/admin-invitations.ts`: Node runtime 対応（`req.headers.get` 前提を排除）＋ preflight(OPTIONS) 対応
+    - `api/invite-accept.ts` / `api/invite-token.ts`: Node runtime 対応＋ preflight(OPTIONS) 対応
+    - Resend 失敗時のエラーメッセージを改善（HTTP status + body の要約）
+    - `invite_email_logs` への insert が環境差分で失敗してもなるべく記録されるようフォールバックを追加
+  - フロント（Xserver 静的配信）
+    - `/invite/accept?token=...` の受諾ページを実運用用に改善
+      - Google OAuth の redirect で `token` が消えないように調整
+      - 未許可ユーザーでも「受諾ページ上ではログイン状態を保持」できるように変更（受諾処理の鶏卵問題を解消）
+      - 受諾処理中の例外で固まらないよう try/catch/finally + タイムアウトを追加
+    - `/login` の OAuth redirect を調整（`/login#access_token...` でループしない）
+  - 動作確認
+    - 招待メール到着 → 受諾 → 学習画面/動画視聴OK
+    - 受諾済みリンクの再利用は `already-used` になる
+    - 招待取消（revoke）でアクセスが弾かれる
+    - 管理画面の招待ログ表示が機能（招待APIログ/招待メール送信ログ）
