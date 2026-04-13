@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
@@ -18,43 +20,41 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 const toRole = (email: string): UserRole => (email.endsWith('@admin.local') ? 'admin' : 'learner')
 
-const withTimeout = async <T,>(promiseLike: PromiseLike<T>, ms: number, fallback: T): Promise<T> => {
-  const timeout = new Promise<T>((resolve) => {
-    window.setTimeout(() => resolve(fallback), ms)
+const withTimeout = async <T,>(promiseLike: PromiseLike<T>, ms: number): Promise<T | null> => {
+  const timeout = new Promise<null>((resolve) => {
+    window.setTimeout(() => resolve(null), ms)
   })
-  return Promise.race([Promise.resolve(promiseLike as any), timeout])
+  return Promise.race([Promise.resolve(promiseLike), timeout])
 }
 
 const getRoleFromProfile = async (userId: string, email: string): Promise<UserRole> => {
   if (!supabase) return toRole(email)
 
-  const { data, error } = await withTimeout(
-    supabase.from('profiles').select('role').eq('id', userId).maybeSingle().then((result) => result),
-    4000,
-    { data: null, error: new Error('timeout') } as any,
-  )
+  const result = await withTimeout(supabase.from('profiles').select('role').eq('id', userId).maybeSingle(), 4000)
 
-  if (error || !data?.role) {
+  if (!result || result.error || !result.data) {
     return toRole(email)
   }
 
-  return data.role === 'admin' ? 'admin' : 'learner'
+  const data = result.data as unknown
+  if (typeof data !== 'object' || data === null) return toRole(email)
+  const role = (data as { role?: unknown }).role
+  if (role !== 'admin' && role !== 'learner') return toRole(email)
+  return role
 }
 
 const isEmailAllowed = async (email: string) => {
   if (!supabase) return false
 
-  const { data, error } = await withTimeout(
-    supabase.from('allowed_emails').select('id').eq('email', email).maybeSingle().then((result) => result),
-    4000,
-    { data: null, error: new Error('timeout') } as any,
-  )
+  const result = await withTimeout(supabase.from('allowed_emails').select('id').eq('email', email).maybeSingle(), 4000)
 
-  if (error) {
+  if (!result || result.error) {
     return false
   }
 
-  return Boolean(data?.id)
+  const data = result.data as unknown
+  if (typeof data !== 'object' || data === null) return false
+  return Boolean((data as { id?: unknown }).id)
 }
 
 const sessionToUser = (session: Session | null): AuthUser | null => {

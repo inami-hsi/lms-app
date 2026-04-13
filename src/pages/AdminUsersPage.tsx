@@ -462,7 +462,7 @@ export const AdminUsersPage = () => {
     apiDetailRef.current?.focus()
   }, [selectedApiLogId])
 
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
     setIsLoadingLogs(true)
     try {
       const [nextEmailLogs, nextApiLogs] = await Promise.all([
@@ -498,7 +498,19 @@ export const AdminUsersPage = () => {
     } finally {
       setIsLoadingLogs(false)
     }
-  }
+  }, [
+    apiLogActionFilter,
+    apiLogAllowedFilter,
+    apiLogRangeHours,
+    apiLogSort,
+    debouncedApiLogSourceIpFilter,
+    debouncedApiLogTriggeredByFilter,
+    debouncedEmailLogEmailFilter,
+    emailLogActionFilter,
+    emailLogRangeHours,
+    emailLogSort,
+    emailLogStatusFilter,
+  ])
 
   const loadMoreEmailLogs = async () => {
     if (!emailLogsHasMore || !emailLogsNextCursor || isLoadingMoreEmailLogs) return
@@ -584,7 +596,6 @@ export const AdminUsersPage = () => {
     const load = async () => {
       const nextInvitations = await listInvitations()
       setInvitations(nextInvitations)
-      await loadLogs()
     }
 
     void load()
@@ -592,19 +603,7 @@ export const AdminUsersPage = () => {
 
   useEffect(() => {
     void loadLogs()
-  }, [
-    emailLogRangeHours,
-    emailLogActionFilter,
-    emailLogStatusFilter,
-    debouncedEmailLogEmailFilter,
-    emailLogSort,
-    apiLogRangeHours,
-    apiLogActionFilter,
-    apiLogAllowedFilter,
-    debouncedApiLogTriggeredByFilter,
-    debouncedApiLogSourceIpFilter,
-    apiLogSort,
-  ])
+  }, [loadLogs])
 
   const refreshInvitations = async () => {
     const expiredCount = await expirePendingInvitations()

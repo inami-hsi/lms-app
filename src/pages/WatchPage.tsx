@@ -5,9 +5,44 @@ import { useAuth } from '../auth/AuthContext'
 import { findLesson, listProgressByUser, saveWatchProgress } from '../data/lmsRepository'
 import type { Lesson } from '../types/lms'
 
+type YouTubePlayerState = {
+  PLAYING: number
+  PAUSED: number
+  ENDED: number
+}
+
+type YouTubePlayer = {
+  destroy?: () => void
+  seekTo?: (seconds: number, allowSeekAhead: boolean) => void
+  getCurrentTime?: () => number
+  getDuration?: () => number
+}
+
+type YouTubeReadyEvent = {
+  target: YouTubePlayer
+}
+
+type YouTubeStateChangeEvent = {
+  data: number
+}
+
+type YouTubePlayerOptions = {
+  videoId: string
+  playerVars?: Record<string, unknown>
+  events?: {
+    onReady?: (event: YouTubeReadyEvent) => void
+    onStateChange?: (event: YouTubeStateChangeEvent) => void
+  }
+}
+
+type YouTubeGlobal = {
+  Player?: new (elementId: string, options: YouTubePlayerOptions) => YouTubePlayer
+  PlayerState?: YouTubePlayerState
+}
+
 declare global {
   interface Window {
-    YT?: any
+    YT?: YouTubeGlobal
     onYouTubeIframeAPIReady?: () => void
   }
 }
@@ -19,7 +54,7 @@ export const WatchPage = () => {
   const [loading, setLoading] = useState(true)
   const [savedSeconds, setSavedSeconds] = useState(0)
   const initialSeekRef = useRef(0)
-  const playerRef = useRef<any>(null)
+  const playerRef = useRef<YouTubePlayer | null>(null)
   const autoSaveTimerRef = useRef<number | null>(null)
 
   const stopAutoSave = () => {
@@ -95,12 +130,12 @@ export const WatchPage = () => {
           start: initialSeekRef.current,
         },
         events: {
-          onReady: (event: any) => {
+          onReady: (event) => {
             if (initialSeekRef.current > 0) {
               event.target.seekTo(initialSeekRef.current, true)
             }
           },
-          onStateChange: (event: any) => {
+          onStateChange: (event) => {
             const state = window.YT?.PlayerState
 
             if (event.data === state?.PLAYING) {
