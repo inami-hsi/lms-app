@@ -190,7 +190,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
+        // Keep the full URL (path + query) so invite accept keeps `?token=...` after OAuth redirect.
+        redirectTo: window.location.href,
       },
     })
   }
