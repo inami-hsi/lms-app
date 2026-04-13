@@ -17,21 +17,28 @@ export const MyPage = () => {
       }
 
       const [courses, progress] = await Promise.all([listCourses(), listProgressByUser(user.id)])
+      const visibleCourses = user.role === 'admin' ? courses : courses.filter((course) => course.isPublished)
       const rows = await Promise.all(
-        courses.map(async (course) => {
-          const lessons = (await listLessonsByCourse(course.id)).filter((lesson) => lesson.isPublished)
-          if (lessons.length === 0) {
+        visibleCourses.map(async (course) => {
+          const lessons = await listLessonsByCourse(course.id)
+          const visibleLessons = user.role === 'admin' ? lessons : lessons.filter((lesson) => lesson.isPublished)
+
+          if (visibleLessons.length === 0) {
             return { id: course.id, title: course.title, progress: 0 }
           }
 
-          const completed = lessons.filter((lesson) =>
-            progress.some((item) => item.lessonId === lesson.id && item.isCompleted),
-          ).length
+          const fractions = visibleLessons.map((lesson) => {
+            const record = progress.find((item) => item.lessonId === lesson.id)
+            if (!record) return 0
+            if (record.isCompleted) return 1
+            if (record.totalSeconds <= 0) return 0
+            return Math.max(0, Math.min(1, record.watchedSeconds / record.totalSeconds))
+          })
 
           return {
             id: course.id,
             title: course.title,
-            progress: Math.round((completed / lessons.length) * 100),
+            progress: Math.round((fractions.reduce((sum, v) => sum + v, 0) / visibleLessons.length) * 100),
           }
         }),
       )
