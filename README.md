@@ -185,6 +185,25 @@ Run this checklist on `https://lms.ai-nagoya.com`:
 ## Ops / DR
 - Disaster recovery runbook: `ops/DR_RUNBOOK.md`
 
+## Ops: CSV Export Routine
+To keep a simple audit trail outside Supabase, export CSVs periodically from:
+- `https://lms.ai-nagoya.com/admin/users`
+- Panels:
+  - `招待メール送信ログ`
+  - `招待APIレート制限ログ`
+
+Suggested routine:
+- Frequency: once per month (or once per week if volume is high)
+- Filter: `期間=7日` (or `全期間` if low volume)
+- Save to: a shared drive folder (e.g. `ops/audit-exports/` in your organization)
+- Filename:
+  - `invite_email_logs_YYYY-MM-DD.csv`
+  - `invite_api_request_logs_YYYY-MM-DD.csv`
+
+Notes:
+- The first meta rows include the current filters (range/action/status/sort/totalCount).
+- `招待APIレート制限ログ` includes `ACCEPT` after the migration `supabase/migrate_add_accept_action.sql` is applied.
+
 ### Resend Domain Verification (High Level)
 To reliably send to external recipients, verify the sender domain in Resend:
 - Add domain (e.g. `ai-nagoya.com`) in Resend → Domains.
