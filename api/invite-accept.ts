@@ -84,6 +84,38 @@ const getBearerToken = (req: any) => {
 
 const isExpired = (expiresAt: string) => new Date(expiresAt).getTime() < Date.now()
 
+const getSourceIp = (req: any) => {
+  const forwarded = getHeader(req, 'x-forwarded-for')
+  if (forwarded) {
+    const first = forwarded.split(',')[0]?.trim()
+    if (first) return first
+  }
+  return getHeader(req, 'x-real-ip') ?? 'unknown'
+}
+
+const logAcceptAttempt = async (params: {
+  adminClient: ReturnType<typeof createClient>
+  userId: string
+  sourceIp: string
+  allowed: boolean
+  reason?: string
+}) => {
+  try {
+    await params.adminClient.from('invite_api_request_logs').insert({
+      triggered_by: params.userId,
+      source_ip: params.sourceIp,
+      action: 'accept',
+      allowed: params.allowed,
+      reason: params.reason ?? null,
+      created_at: new Date().toISOString(),
+    })
+  } catch (error) {
+    // Do not block invite acceptance on logging failures.
+    // eslint-disable-next-line no-console
+    console.error('invite accept log failed', error)
+  }
+}
+
 export default async function handler(req: any, res?: any) {
   // Vercel uses Node runtime for these serverless functions.
   return handlerNodeCompat(req, res)
@@ -152,9 +184,17 @@ async function handlerNodeCompat(req: any, res?: any) {
 
   const authClient = createClient(supabaseUrl, supabaseAnonKey)
   const adminClient = createClient(supabaseUrl, serviceRoleKey)
+  const sourceIp = getSourceIp(req)
 
   const { data: userData, error: userError } = await authClient.auth.getUser(token)
   if (userError || !userData?.user?.email) {
+    await logAcceptAttempt({
+      adminClient,
+      userId: 'unknown',
+      sourceIp,
+      allowed: false,
+      reason: 'invalid-session',
+    })
     return json(req, 401, { error: 'Invalid user session.' }, res)
   }
 
@@ -168,19 +208,23 @@ async function handlerNodeCompat(req: any, res?: any) {
     .maybeSingle()
 
   if (inviteError || !invitation) {
+    await logAcceptAttempt({ adminClient, userId, sourceIp, allowed: false, reason: 'invalid-token' })
     return json(req, 200, { status: 'invalid' satisfies AcceptInvitationResult }, res)
   }
 
   if (invitation.status !== 'pending') {
+    await logAcceptAttempt({ adminClient, userId, sourceIp, allowed: false, reason: 'already-used' })
     return json(req, 200, { status: 'already-used' satisfies AcceptInvitationResult }, res)
   }
 
   if (isExpired(invitation.expires_at)) {
     await adminClient.from('invitations').update({ status: 'expired' }).eq('id', invitation.id)
+    await logAcceptAttempt({ adminClient, userId, sourceIp, allowed: false, reason: 'expired' })
     return json(req, 200, { status: 'expired' satisfies AcceptInvitationResult }, res)
   }
 
   if (String(invitation.email).toLowerCase() !== userEmail.toLowerCase()) {
+    await logAcceptAttempt({ adminClient, userId, sourceIp, allowed: false, reason: 'email-mismatch' })
     return json(req, 200, { status: 'email-mismatch' satisfies AcceptInvitationResult }, res)
   }
 
@@ -191,8 +235,11 @@ async function handlerNodeCompat(req: any, res?: any) {
     .eq('id', invitation.id)
 
   if (updateError) {
+    await logAcceptAttempt({ adminClient, userId, sourceIp, allowed: false, reason: 'db-error' })
     return json(req, 500, { error: 'Failed to accept invitation.' }, res)
   }
+
+  await logAcceptAttempt({ adminClient, userId, sourceIp, allowed: true })
 
   await adminClient.from('allowed_emails').upsert(
     { email: userEmail, created_by: userId },

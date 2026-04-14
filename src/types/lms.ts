@@ -63,7 +63,7 @@ export type InviteApiRequestLog = {
   id: string
   triggeredBy?: string
   sourceIp?: string
-  action: 'create' | 'resend' | 'revoke'
+  action: 'create' | 'resend' | 'revoke' | 'accept'
   allowed: boolean
   reason?: string
   createdAt: string

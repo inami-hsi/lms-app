@@ -7,7 +7,7 @@ type SortOrder = 'asc' | 'desc'
 
 type EmailAction = 'create' | 'resend'
 type EmailStatus = 'success' | 'failed'
-type ApiAction = 'create' | 'resend' | 'revoke'
+type ApiAction = 'create' | 'resend' | 'revoke' | 'accept'
 type AllowedFilter = 'allowed' | 'blocked'
 
 const getCorsOrigin = (req: any) => {

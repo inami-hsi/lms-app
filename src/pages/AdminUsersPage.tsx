@@ -54,7 +54,7 @@ export const AdminUsersPage = () => {
   const [debouncedEmailLogEmailFilter, setDebouncedEmailLogEmailFilter] = useState('')
   const [emailLogSort, setEmailLogSort] = useState<'desc' | 'asc'>('desc')
   const [apiLogRangeHours, setApiLogRangeHours] = useState(24)
-  const [apiLogActionFilter, setApiLogActionFilter] = useState<'all' | 'create' | 'resend' | 'revoke'>('all')
+  const [apiLogActionFilter, setApiLogActionFilter] = useState<'all' | 'create' | 'resend' | 'revoke' | 'accept'>('all')
   const [apiLogAllowedFilter, setApiLogAllowedFilter] = useState<'all' | 'allowed' | 'blocked'>('all')
   const [apiLogTriggeredByFilter, setApiLogTriggeredByFilter] = useState('')
   const [debouncedApiLogTriggeredByFilter, setDebouncedApiLogTriggeredByFilter] = useState('')
@@ -108,10 +108,11 @@ export const AdminUsersPage = () => {
     return 'すべて'
   }
 
-  const apiActionLabel = (value: 'all' | 'create' | 'resend' | 'revoke') => {
+  const apiActionLabel = (value: 'all' | 'create' | 'resend' | 'revoke' | 'accept') => {
     if (value === 'create') return 'CREATE'
     if (value === 'resend') return 'RESEND'
     if (value === 'revoke') return 'REVOKE'
+    if (value === 'accept') return 'ACCEPT'
     return 'すべて'
   }
 
@@ -321,7 +322,7 @@ export const AdminUsersPage = () => {
         emailQuery: string
         emailSort: 'asc' | 'desc'
         apiRangeHours: number
-        apiAction: 'all' | 'create' | 'resend' | 'revoke'
+        apiAction: 'all' | 'create' | 'resend' | 'revoke' | 'accept'
         apiAllowed: 'all' | 'allowed' | 'blocked'
         apiTriggeredBy: string
         apiSourceIp: string
@@ -1275,11 +1276,12 @@ export const AdminUsersPage = () => {
           </label>
           <label>
             種別
-            <select value={apiLogActionFilter} onChange={(event) => setApiLogActionFilter(event.target.value as 'all' | 'create' | 'resend' | 'revoke')}>
+            <select value={apiLogActionFilter} onChange={(event) => setApiLogActionFilter(event.target.value as 'all' | 'create' | 'resend' | 'revoke' | 'accept')}>
               <option value="all">すべて</option>
               <option value="create">CREATE</option>
               <option value="resend">RESEND</option>
               <option value="revoke">REVOKE</option>
+              <option value="accept">ACCEPT</option>
             </select>
           </label>
           <label>

@@ -180,7 +180,7 @@ Run this checklist on `https://lms.ai-nagoya.com`:
 1. Create invite (admin) → accept (learner) → confirm learner can watch lessons and admin sees `accepted`.
 2. Revoke (admin) → learner cannot sign in (shows "アクセス許可されていません").
 3. Reissue (admin) → accept again (learner) → learner can sign in and admin sees `accepted`.
-4. Logs: `招待メール送信ログ` and `招待APIレート制限ログ` increase under `24時間`.
+4. Logs: `招待メール送信ログ` and `招待APIレート制限ログ` increase under `24時間` (includes `ACCEPT`).
 
 ## Ops / DR
 - Disaster recovery runbook: `ops/DR_RUNBOOK.md`

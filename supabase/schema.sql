@@ -80,7 +80,7 @@ create table if not exists public.invite_api_request_logs (
   id uuid primary key default gen_random_uuid(),
   triggered_by uuid,
   source_ip text,
-  action text not null check (action in ('create', 'resend', 'revoke')),
+  action text not null check (action in ('create', 'resend', 'revoke', 'accept')),
   allowed boolean not null,
   reason text,
   created_at timestamptz not null default now()

@@ -753,7 +753,7 @@ export const listInviteApiRequestLogsPage = async (options?: {
   limit?: number
   hours?: number
   cursor?: string
-  action?: 'all' | 'create' | 'resend' | 'revoke'
+  action?: 'all' | 'create' | 'resend' | 'revoke' | 'accept'
   allowed?: 'all' | 'allowed' | 'blocked'
   triggeredBy?: string
   sourceIp?: string
@@ -789,7 +789,7 @@ export const listInviteApiRequestLogsPage = async (options?: {
 export const listInviteApiRequestLogs = async (options?: {
   limit?: number
   hours?: number
-  action?: 'all' | 'create' | 'resend' | 'revoke'
+  action?: 'all' | 'create' | 'resend' | 'revoke' | 'accept'
   allowed?: 'all' | 'allowed' | 'blocked'
   triggeredBy?: string
   sourceIp?: string
