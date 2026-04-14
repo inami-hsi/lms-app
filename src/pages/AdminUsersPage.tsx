@@ -648,7 +648,7 @@ export const AdminUsersPage = () => {
 
   const handleResend = async (invitation: Invitation) => {
     try {
-      const updated = await resendInvitation(invitation.id)
+      const updated = await resendInvitation(invitation.id, { sendEmail: true })
       setInvitations((current) => current.map((item) => (item.id === invitation.id ? updated : item)))
       await loadLogs()
       if (updated.notificationError) {
@@ -668,7 +668,7 @@ export const AdminUsersPage = () => {
 
   const handleReissue = async (invitation: Invitation) => {
     try {
-      const updated = await resendInvitation(invitation.id)
+      const updated = await resendInvitation(invitation.id, { sendEmail: true })
       setInvitations((current) => current.map((item) => (item.id === invitation.id ? updated : item)))
       await loadLogs()
       if (updated.notificationError) {
@@ -683,6 +683,26 @@ export const AdminUsersPage = () => {
         setCooldownSeconds(retryAfterSec)
       }
       setMessage(error instanceof Error ? error.message : '招待の再発行に失敗しました。')
+    }
+  }
+
+  const handleIssueLink = async (invitation: Invitation) => {
+    try {
+      const updated = await resendInvitation(invitation.id, { sendEmail: false })
+      setInvitations((current) => current.map((item) => (item.id === invitation.id ? updated : item)))
+      await loadLogs()
+
+      if (updated.inviteLink) {
+        window.open(updated.inviteLink, '_blank', 'noreferrer')
+      }
+
+      setMessage(`${invitation.email} の招待リンクを再発行しました。`)
+    } catch (error) {
+      const retryAfterSec = getRetryAfterSecFromError(error)
+      if (retryAfterSec) {
+        setCooldownSeconds(retryAfterSec)
+      }
+      setMessage(error instanceof Error ? error.message : '招待リンクの再発行に失敗しました。')
     }
   }
 
@@ -856,13 +876,22 @@ export const AdminUsersPage = () => {
             <div>
               <h3>{invitation.email}</h3>
               <p className="muted">有効期限: {new Date(invitation.expiresAt).toLocaleDateString('ja-JP')}</p>
-              {invitation.inviteLink && (
-                <p className="invite-link-wrap">
+              <p className="invite-link-wrap">
+                {invitation.inviteLink ? (
                   <a href={invitation.inviteLink} target="_blank" rel="noreferrer" className="invite-link">
                     招待リンクを開く
                   </a>
-                </p>
-              )}
+                ) : invitation.status === 'revoked' ? null : (
+                  <button
+                    type="button"
+                    className="button secondary tiny"
+                    onClick={() => void handleIssueLink(invitation)}
+                    disabled={cooldownSeconds > 0}
+                  >
+                    招待リンクを発行
+                  </button>
+                )}
+              </p>
               {invitation.notificationError && <p className="invite-notify-error">通知失敗: {invitation.notificationError}</p>}
               <div className="row-actions">
                 {invitation.status === 'revoked' && (

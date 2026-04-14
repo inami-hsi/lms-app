@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { createHash } from 'crypto'
 
 type InvitationInfo = {
   emailMasked: string
@@ -85,6 +86,8 @@ const maskEmail = (email: string) => {
   return `${maskedLocal}@${domain}`
 }
 
+const sha256Hex = (value: string) => createHash('sha256').update(value).digest('hex')
+
 export default async function handler(req: any, res?: any) {
   if (req.method === 'OPTIONS') {
     const corsHeaders = buildCorsHeaders(req)
@@ -112,11 +115,13 @@ export default async function handler(req: any, res?: any) {
     return json(req, 400, { error: 'token is required.' }, res)
   }
 
+  const tokenHash = sha256Hex(token)
+
   const adminClient = createClient(supabaseUrl, serviceRoleKey)
   const { data, error } = await adminClient
     .from('invitations')
     .select('email, status, expires_at')
-    .eq('token', token)
+    .eq('token_hash', tokenHash)
     .maybeSingle()
 
   if (error || !data) {

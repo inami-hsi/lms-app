@@ -1,12 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
+import { createHash, randomUUID } from 'crypto'
 
-type Action = 'create' | 'resend' | 'revoke'
+type Action = 'create' | 'resend' | 'revoke' | 'expire'
 
 type RequestBody = {
   action?: Action
   email?: string
   invitedBy?: string
   invitationId?: string
+  sendEmail?: boolean
 }
 
 type InvitationResponse = {
@@ -15,8 +17,8 @@ type InvitationResponse = {
   invitedBy: string
   status: 'pending' | 'accepted' | 'expired' | 'revoked'
   expiresAt: string
-  token: string
-  inviteLink: string
+  token?: string
+  inviteLink?: string
   notificationError?: string
 }
 
@@ -32,7 +34,6 @@ type DbInvitation = {
   invited_by: string
   status: InvitationResponse['status']
   expires_at: string
-  token: string
 }
 
 const getHeader = (req: any, name: string) => {
@@ -80,7 +81,7 @@ const buildCorsHeaders = (req: any) => {
 
   return {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'POST,OPTIONS',
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'authorization,content-type,apikey,x-client-info',
     Vary: 'Origin',
   } as Record<string, string>
@@ -109,6 +110,8 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 const RATE_LIMIT_WINDOW_SEC = Number(process.env.INVITE_RATE_LIMIT_WINDOW_SEC ?? '60')
 const RATE_LIMIT_USER_MAX = Number(process.env.INVITE_RATE_LIMIT_USER_MAX ?? '20')
 const RATE_LIMIT_IP_MAX = Number(process.env.INVITE_RATE_LIMIT_IP_MAX ?? '40')
+
+const sha256Hex = (value: string) => createHash('sha256').update(value).digest('hex')
 
 const createInviteLink = (token: string, req: Request) => {
   const appBaseUrl = process.env.APP_BASE_URL
@@ -267,14 +270,13 @@ const logInviteEmail = async (params: {
   return { ok: false as const }
 }
 
-const toInvitation = (row: DbInvitation, req: any): InvitationResponse => ({
+const toInvitation = (row: DbInvitation, req: any, token?: string): InvitationResponse => ({
   id: row.id,
   email: row.email,
   invitedBy: row.invited_by,
   status: row.status,
   expiresAt: row.expires_at,
-  token: row.token,
-  inviteLink: createInviteLink(row.token, req),
+  ...(token ? { token, inviteLink: createInviteLink(token, req) } : {}),
 })
 
 const getBearerToken = (req: any) => {
@@ -472,6 +474,25 @@ export default async function handler(req: any, res?: any) {
     return new Response(null, { status: 204, headers: corsHeaders })
   }
 
+  if (req.method === 'GET') {
+    const authResult = await ensureAdmin(req)
+    if (!authResult.ok) {
+      return json(req, authResult.status, { error: authResult.error }, res)
+    }
+
+    const { adminClient } = authResult
+    const { data, error } = await adminClient
+      .from('invitations')
+      .select('id, email, invited_by, status, expires_at')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      return json(req, 500, { error: 'Failed to list invitations.' }, res)
+    }
+
+    return json(req, 200, { invitations: (data ?? []).map((row) => toInvitation(row as DbInvitation, req)) }, res)
+  }
+
   if (req.method !== 'POST') {
     return json(req, 405, { error: 'Method not allowed' }, res)
   }
@@ -517,7 +538,8 @@ export default async function handler(req: any, res?: any) {
       return json(req, 400, { error: 'email is required for create.' }, res)
     }
 
-    const token = crypto.randomUUID()
+    const token = randomUUID()
+    const tokenHash = sha256Hex(token)
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
 
     const { data, error } = await adminClient
@@ -525,21 +547,21 @@ export default async function handler(req: any, res?: any) {
       .insert({
         email: body.email,
         invited_by: userId,
-        token,
+        token_hash: tokenHash,
         status: 'pending',
         expires_at: expiresAt,
       })
-      .select('id, email, invited_by, status, expires_at, token')
+      .select('id, email, invited_by, status, expires_at')
       .single()
 
     if (error || !data) {
       return json(req, 500, { error: 'Failed to create invitation.' }, res)
     }
 
-    const invitation = toInvitation(data as DbInvitation, req)
+    const invitation = toInvitation(data as DbInvitation, req, token)
     const notify = await sendInviteEmail({
       email: invitation.email,
-      inviteLink: invitation.inviteLink,
+      inviteLink: invitation.inviteLink!,
       expiresAt: invitation.expiresAt,
     })
 
@@ -568,37 +590,43 @@ export default async function handler(req: any, res?: any) {
       return json(req, 400, { error: 'invitationId is required for resend.' }, res)
     }
 
-    const token = crypto.randomUUID()
+    const token = randomUUID()
+    const tokenHash = sha256Hex(token)
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
 
     const { data, error } = await adminClient
       .from('invitations')
-      .update({ token, status: 'pending', expires_at: expiresAt, accepted_at: null, used_at: null })
+      .update({ token_hash: tokenHash, status: 'pending', expires_at: expiresAt, accepted_at: null, used_at: null })
       .eq('id', body.invitationId)
-      .select('id, email, invited_by, status, expires_at, token')
+      .select('id, email, invited_by, status, expires_at')
       .single()
 
     if (error || !data) {
       return json(req, 500, { error: 'Failed to resend invitation.' }, res)
     }
 
-    const invitation = toInvitation(data as DbInvitation, req)
-    const notify = await sendInviteEmail({
-      email: invitation.email,
-      inviteLink: invitation.inviteLink,
-      expiresAt: invitation.expiresAt,
-    })
+    const invitation = toInvitation(data as DbInvitation, req, token)
+    const shouldSendEmail = body.sendEmail !== false
+    const notify = shouldSendEmail
+      ? await sendInviteEmail({
+          email: invitation.email,
+          inviteLink: invitation.inviteLink!,
+          expiresAt: invitation.expiresAt,
+        })
+      : { ok: true, attempts: 0 }
 
-    const emailLogResult = await logInviteEmail({
-      adminClient,
-      invitationId: invitation.id,
-      email: invitation.email,
-      action: 'resend',
-      status: notify.ok ? 'success' : 'failed',
-      errorDetail: notify.error,
-      attempts: notify.attempts,
-      triggeredBy: userId,
-    })
+    const emailLogResult = shouldSendEmail
+      ? await logInviteEmail({
+          adminClient,
+          invitationId: invitation.id,
+          email: invitation.email,
+          action: 'resend',
+          status: notify.ok ? 'success' : 'failed',
+          errorDetail: notify.error,
+          attempts: notify.attempts,
+          triggeredBy: userId,
+        })
+      : { ok: true as const }
 
     if (!notify.ok) {
       invitation.notificationError = notify.error
@@ -618,7 +646,7 @@ export default async function handler(req: any, res?: any) {
       .from('invitations')
       .update({ status: 'revoked' })
       .eq('id', body.invitationId)
-      .select('id, email, invited_by, status, expires_at, token')
+      .select('id, email, invited_by, status, expires_at')
       .single()
 
     if (error || !data) {
@@ -628,6 +656,14 @@ export default async function handler(req: any, res?: any) {
     await adminClient.from('allowed_emails').delete().eq('email', body.email)
 
     return json(req, 200, { invitation: toInvitation(data as DbInvitation, req) }, res)
+  }
+
+  if (body.action === 'expire') {
+    const { data, error } = await adminClient.rpc('expire_pending_invitations')
+    if (error) {
+      return json(req, 500, { error: 'Failed to expire invitations.' }, res)
+    }
+    return json(req, 200, { affected: typeof data === 'number' ? data : 0 }, res)
   }
 
   return json(req, 400, { error: 'Unsupported action.' }, res)

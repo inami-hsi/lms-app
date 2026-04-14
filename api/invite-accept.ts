@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { createHash } from 'crypto'
 
 type AcceptInvitationResult = 'accepted' | 'invalid' | 'expired' | 'already-used' | 'email-mismatch'
 
@@ -81,6 +82,8 @@ const getBearerToken = (req: any) => {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null
   return authHeader.slice(7)
 }
+
+const sha256Hex = (value: string) => createHash('sha256').update(value).digest('hex')
 
 const isExpired = (expiresAt: string) => new Date(expiresAt).getTime() < Date.now()
 
@@ -181,6 +184,7 @@ async function handlerNodeCompat(req: any, res?: any) {
   if (!inviteToken) {
     return json(req, 400, { error: 'token is required.' }, res)
   }
+  const inviteTokenHash = sha256Hex(inviteToken)
 
   const authClient = createClient(supabaseUrl, supabaseAnonKey)
   const adminClient = createClient(supabaseUrl, serviceRoleKey)
@@ -204,7 +208,7 @@ async function handlerNodeCompat(req: any, res?: any) {
   const { data: invitation, error: inviteError } = await adminClient
     .from('invitations')
     .select('id, email, status, expires_at')
-    .eq('token', inviteToken)
+    .eq('token_hash', inviteTokenHash)
     .maybeSingle()
 
   if (inviteError || !invitation) {

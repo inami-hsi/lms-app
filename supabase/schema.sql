@@ -55,7 +55,8 @@ create table if not exists public.watch_progress (
 create table if not exists public.invitations (
   id uuid primary key default gen_random_uuid(),
   email text not null,
-  token uuid not null unique default gen_random_uuid(),
+  -- Store only a hash of the invite token (token itself is sent in the URL, never stored in DB).
+  token_hash text not null unique,
   invited_by uuid,
   status text not null check (status in ('pending', 'accepted', 'expired', 'revoked')) default 'pending',
   expires_at timestamptz not null,
@@ -145,6 +146,8 @@ create or replace function public.is_admin()
 returns boolean
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select exists (
     select 1
@@ -153,18 +156,42 @@ as $$
   );
 $$;
 
+-- Do not expose helper function to client roles (policies can still use it)
+revoke all on function public.is_admin() from anon, authenticated;
+
 drop policy if exists "profiles_select_own_or_admin" on public.profiles;
 create policy "profiles_select_own_or_admin"
 on public.profiles
 for select
 using (id = auth.uid() or public.is_admin());
 
+drop policy if exists "profiles_insert_own" on public.profiles;
+create policy "profiles_insert_own"
+on public.profiles
+for insert
+with check (
+  id = auth.uid()
+  and email = (auth.jwt() ->> 'email')
+  and role = 'learner'
+);
+
 drop policy if exists "profiles_update_own" on public.profiles;
 create policy "profiles_update_own"
 on public.profiles
 for update
 using (id = auth.uid())
-with check (id = auth.uid());
+with check (
+  id = auth.uid()
+  and email = (auth.jwt() ->> 'email')
+  and role = 'learner'
+);
+
+drop policy if exists "profiles_admin_all" on public.profiles;
+create policy "profiles_admin_all"
+on public.profiles
+for all
+using (public.is_admin())
+with check (public.is_admin());
 
 drop policy if exists "allowed_emails_admin_all" on public.allowed_emails;
 create policy "allowed_emails_admin_all"
@@ -172,6 +199,12 @@ on public.allowed_emails
 for all
 using (public.is_admin())
 with check (public.is_admin());
+
+drop policy if exists "allowed_emails_select_by_email" on public.allowed_emails;
+create policy "allowed_emails_select_by_email"
+on public.allowed_emails
+for select
+using ((auth.jwt() ->> 'email') = email);
 
 drop policy if exists "invitations_admin_all" on public.invitations;
 create policy "invitations_admin_all"
@@ -239,3 +272,24 @@ on public.watch_progress
 for update
 using (user_id = auth.uid() or public.is_admin())
 with check (user_id = auth.uid() or public.is_admin());
+
+-- ---------------------------------------------------------------------------
+-- Privileges hardening
+--
+-- Supabase projects often start with broad default grants for `anon` and
+-- `authenticated`. We revoke them and re-grant the minimum needed by the
+-- client app. Admin-only tables are accessed through server APIs using the
+-- Service Role key.
+-- ---------------------------------------------------------------------------
+revoke all privileges on all tables in schema public from anon, authenticated;
+revoke all privileges on all sequences in schema public from anon, authenticated;
+revoke all privileges on all routines in schema public from anon, authenticated;
+
+grant select on table public.courses to authenticated;
+grant select on table public.lessons to authenticated;
+grant select, insert, update on table public.profiles to authenticated;
+grant select on table public.allowed_emails to authenticated;
+grant select, insert, update on table public.watch_progress to authenticated;
+
+-- Maintenance function should not be callable from the client.
+revoke execute on function public.expire_pending_invitations() from authenticated;

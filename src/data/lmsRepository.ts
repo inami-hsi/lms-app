@@ -35,15 +35,6 @@ type DbProgress = {
   updated_at: string
 }
 
-type DbInvitation = {
-  id: string
-  email: string
-  invited_by: string
-  status: Invitation['status']
-  expires_at: string
-  token: string
-}
-
 type DbInviteEmailLog = {
   id: string
   invitation_id: string | null
@@ -59,7 +50,7 @@ type DbInviteApiRequestLog = {
   id: string
   triggered_by: string | null
   source_ip: string | null
-  action: 'create' | 'resend' | 'revoke'
+  action: 'create' | 'resend' | 'revoke' | 'accept'
   allowed: boolean
   reason: string | null
   created_at: string
@@ -90,6 +81,14 @@ type InviteApiError = Error & {
 
 type AdminInviteApiResponse = {
   invitation: Invitation
+}
+
+type AdminInvitationsListApiResponse = {
+  invitations: Invitation[]
+}
+
+type AdminInvitationsExpireApiResponse = {
+  affected?: number
 }
 
 type AdminEmailLogsApiResponse = {
@@ -171,16 +170,6 @@ const toProgress = (row: DbProgress): WatchProgress => ({
   totalSeconds: row.total_seconds,
   isCompleted: row.is_completed,
   updatedAt: row.updated_at,
-})
-
-const toInvitation = (row: DbInvitation): Invitation => ({
-  id: row.id,
-  email: row.email,
-  invitedBy: row.invited_by,
-  status: row.status,
-  expiresAt: row.expires_at,
-  token: row.token,
-  inviteLink: buildInviteLink(row.token),
 })
 
 const toInviteEmailLog = (row: DbInviteEmailLog): InviteEmailLog => ({
@@ -275,10 +264,7 @@ const getAccessToken = async () => {
   return response.json()
 }
 
-const callAdminInvitationApi = async (
-  action: 'create' | 'resend' | 'revoke',
-  payload: Record<string, string>,
-) => {
+const callAdminInvitationRaw = async (payload: Record<string, unknown>) => {
   const accessToken = await getAccessToken()
   if (!accessToken) {
     throw new Error('管理者セッションが取得できません。再ログインしてください。')
@@ -290,7 +276,7 @@ const callAdminInvitationApi = async (
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ action, ...payload }),
+    body: JSON.stringify(payload),
   })
 
   if (!response.ok) {
@@ -319,8 +305,46 @@ const callAdminInvitationApi = async (
     throw apiError
   }
 
-  const json = (await response.json()) as AdminInviteApiResponse
+  return response.json() as Promise<unknown>
+}
+
+const callAdminInvitationApi = async (
+  action: 'create' | 'resend' | 'revoke',
+  payload: Record<string, unknown>,
+) => {
+  const json = (await callAdminInvitationRaw({ action, ...payload })) as AdminInviteApiResponse
   return json.invitation
+}
+
+const expirePendingInvitationsViaApi = async () => {
+  const json = (await callAdminInvitationRaw({ action: 'expire' })) as AdminInvitationsExpireApiResponse
+  return typeof json.affected === 'number' && Number.isFinite(json.affected) ? json.affected : 0
+}
+
+const listInvitationsViaApi = async () => {
+  const accessToken = await getAccessToken()
+  if (!accessToken) {
+    throw new Error('管理者セッションが取得できません。再ログインしてください。')
+  }
+
+  const response = await fetch(buildApiUrl('/api/admin-invitations'), {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+
+  if (!response.ok) {
+    let message = '招待一覧の取得に失敗しました。'
+    try {
+      const body = (await response.json()) as { error?: string }
+      if (body.error) message = body.error
+    } catch {
+      // Keep default message.
+    }
+    throw new Error(message)
+  }
+
+  const json = (await response.json()) as AdminInvitationsListApiResponse
+  return json.invitations ?? []
 }
 
 const sendInviteNotification = async (invitation: Invitation) => {
@@ -394,57 +418,7 @@ export const expirePendingInvitations = async () => {
     return updated
   }
 
-  const { data, error } = await supabase.rpc('expire_pending_invitations')
-  if (!error && typeof data === 'number') {
-    return data
-  }
-
-  const { data: staleRows, error: selectError } = await supabase
-    .from('invitations')
-    .select('id')
-    .eq('status', 'pending')
-    .lt('expires_at', new Date().toISOString())
-
-  if (selectError || !staleRows || staleRows.length === 0) {
-    return 0
-  }
-
-  const staleIds = staleRows.map((row) => row.id)
-  await supabase.from('invitations').update({ status: 'expired' }).in('id', staleIds)
-  return staleIds.length
-}
-
-const toExpiredIfNeeded = (invitation: Invitation) => {
-  if (invitation.status === 'pending' && isExpired(invitation.expiresAt)) {
-    return { ...invitation, status: 'expired' as const }
-  }
-  return invitation
-}
-
-export const getInvitationByToken = async (token: string) => {
-  if (!isSupabaseConfigured || !supabase) {
-    const invitation = demoInvitations.find((item) => item.token === token)
-    if (!invitation) return null
-    if (invitation.status === 'pending' && isExpired(invitation.expiresAt)) {
-      invitation.status = 'expired'
-    }
-    return invitation
-  }
-
-  const { data, error } = await supabase
-    .from('invitations')
-    .select('id, email, invited_by, status, expires_at, token')
-    .eq('token', token)
-    .maybeSingle()
-
-  if (error || !data) return null
-
-  const invitation = toExpiredIfNeeded(toInvitation(data as DbInvitation))
-  if (invitation.status === 'expired') {
-    await supabase.from('invitations').update({ status: 'expired' }).eq('id', invitation.id)
-  }
-
-  return invitation
+  return expirePendingInvitationsViaApi()
 }
 
 export const getInvitationInfoByToken = async (token: string): Promise<InvitationTokenInfo | null> => {
@@ -692,15 +666,7 @@ export const listInvitations = async () => {
       }
     })
   }
-
-  const { data, error } = await supabase
-    .from('invitations')
-    .select('id, email, invited_by, status, expires_at, token')
-    .order('created_at', { ascending: false })
-
-  if (error) throw error
-
-  return (data as DbInvitation[]).map(toInvitation)
+  return listInvitationsViaApi()
 }
 
 export const listInviteEmailLogsPage = async (options?: {
@@ -826,7 +792,7 @@ export const createInvitation = async (payload: { email: string; invitedBy: stri
   })
 }
 
-export const resendInvitation = async (invitationId: string) => {
+export const resendInvitation = async (invitationId: string, options?: { sendEmail?: boolean }) => {
   if (!isSupabaseConfigured || !supabase) {
     const invitation = demoInvitations.find((item) => item.id === invitationId)
     if (!invitation) throw new Error('招待データが見つかりません')
@@ -841,7 +807,7 @@ export const resendInvitation = async (invitationId: string) => {
     return invitation
   }
 
-  return callAdminInvitationApi('resend', { invitationId })
+  return callAdminInvitationApi('resend', { invitationId, sendEmail: options?.sendEmail !== false })
 }
 
 export const revokeInvitation = async (invitationId: string, email: string) => {
