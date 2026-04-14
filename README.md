@@ -185,6 +185,11 @@ Run this checklist on `https://lms.ai-nagoya.com`:
 ## Ops / DR
 - Disaster recovery runbook: `ops/DR_RUNBOOK.md`
 
+## Supabase Schema / Migrations
+- New project setup: run `supabase/schema.sql` in Supabase SQL Editor.
+- Existing project updates: apply `supabase/migrate_*.sql` as needed.
+  - `supabase/migrate_add_accept_action.sql`: enables `ACCEPT` logging in `invite_api_request_logs`.
+
 ## Ops: CSV Export Routine
 To keep a simple audit trail outside Supabase, export CSVs periodically from:
 - `https://lms.ai-nagoya.com/admin/users`

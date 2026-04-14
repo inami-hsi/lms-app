@@ -73,3 +73,15 @@
     - 受諾済みリンクの再利用は `already-used` になる
     - 招待取消（revoke）でアクセスが弾かれる
     - 管理画面の招待ログ表示が機能（招待APIログ/招待メール送信ログ）
+
+## 2026-04-14
+- Ops / ドキュメント
+  - DR手順書を追加（`ops/DR_RUNBOOK.md`）
+  - READMEにデプロイ/運用情報を追記（CSVエクスポート運用、Supabase migrationの扱い）
+- 監査ログの改善
+  - 招待受諾（`accept`）も `invite_api_request_logs` に記録するように対応
+  - Supabase既存環境向けに `supabase/migrate_add_accept_action.sql` を追加
+- 自動テスト（依存なし）
+  - `npm run test:cursor`（admin-logs cursor/sort ロジック）
+  - `npm run test:invite`（招待受諾の判定ロジック）
+  - `npm run test:invite-admin`（招待管理のレート制限/リンク生成ロジック）

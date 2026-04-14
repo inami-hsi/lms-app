@@ -32,6 +32,7 @@ This document describes a minimal, repeatable recovery procedure for the LMS app
 3. Run schema:
    - Open Supabase Dashboard → SQL Editor → New query
    - Copy/paste and run `supabase/schema.sql`.
+   - If restoring into an *existing* project that already has tables, also apply any needed migrations in `supabase/migrate_*.sql`.
 4. Create an initial admin:
    - Supabase Dashboard → Authentication → Users
    - Sign in once via the app (Google OAuth) OR create a user.
@@ -111,5 +112,4 @@ These must be present at build time so Vite embeds them.
 3. Revoke blocks learner sign-in; reissue restores access.
 4. Admin logs:
    - `招待メール送信ログ` increases for create/resend.
-   - `招待APIレート制限ログ` increases for create/resend/revoke.
-
+   - `招待APIレート制限ログ` increases for create/resend/revoke/accept.
