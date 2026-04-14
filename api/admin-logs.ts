@@ -15,13 +15,20 @@ const getCorsOrigin = (req: any) => {
     typeof req?.headers?.get === 'function' ? req.headers.get('origin') : req?.headers?.origin || req?.headers?.Origin
   if (!origin || typeof origin !== 'string') return null
 
-  // Lock down to known frontends.
-  const allowed = new Set([
-    'https://lms.ai-nagoya.com',
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-  ])
+  // Lock down to known frontends (defaults to production only).
+  const allowed = new Set(
+    String(process.env.CORS_ALLOWED_ORIGINS ?? 'https://lms.ai-nagoya.com')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
+  )
+
+  // Allow local dev origins only outside production.
+  if (process.env.NODE_ENV !== 'production') {
+    allowed.add('http://localhost:3000')
+    allowed.add('http://localhost:5173')
+    allowed.add('http://127.0.0.1:5173')
+  }
   return allowed.has(origin) ? origin : null
 }
 

@@ -66,12 +66,18 @@ const getCorsOrigin = (req: any) => {
   const origin = getHeader(req, 'origin')
   if (!origin) return null
 
-  const allowed = new Set([
-    'https://lms.ai-nagoya.com',
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-  ])
+  const allowed = new Set(
+    String(process.env.CORS_ALLOWED_ORIGINS ?? 'https://lms.ai-nagoya.com')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
+  )
+
+  if (process.env.NODE_ENV !== 'production') {
+    allowed.add('http://localhost:3000')
+    allowed.add('http://localhost:5173')
+    allowed.add('http://127.0.0.1:5173')
+  }
   return allowed.has(origin) ? origin : null
 }
 
