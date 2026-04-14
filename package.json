@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test:cursor": "node --test scripts/admin-logs-cursor.test.mjs",
     "test:invite": "node --test scripts/invite-accept-logic.test.mjs",
-    "test": "npm run test:cursor && npm run test:invite"
+    "test:invite-admin": "node --test scripts/admin-invitations-logic.test.mjs",
+    "test": "npm run test:cursor && npm run test:invite && npm run test:invite-admin"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.102.1",
