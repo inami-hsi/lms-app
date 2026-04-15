@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { createClient } from '@supabase/supabase-js'
 import { createHash, randomUUID } from 'crypto'
 
@@ -269,7 +271,6 @@ const logInviteEmail = async (params: {
     const { error } = await params.adminClient.from('invite_email_logs').insert(row)
     if (!error) return { ok: true as const }
     // Keep the last error, but don't throw; email sending itself should not be blocked by logging failures.
-    // eslint-disable-next-line no-console
     console.error('logInviteEmail insert failed', error)
   }
 

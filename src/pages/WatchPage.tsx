@@ -1,5 +1,5 @@
 import { Navigate, useParams } from 'react-router-dom'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useAuth } from '../auth/AuthContext'
 import { findLesson, listProgressByUser, saveWatchProgress } from '../data/lmsRepository'
@@ -57,14 +57,14 @@ export const WatchPage = () => {
   const playerRef = useRef<YouTubePlayer | null>(null)
   const autoSaveTimerRef = useRef<number | null>(null)
 
-  const stopAutoSave = () => {
+  const stopAutoSave = useCallback(() => {
     if (autoSaveTimerRef.current) {
       window.clearInterval(autoSaveTimerRef.current)
       autoSaveTimerRef.current = null
     }
-  }
+  }, [])
 
-  const persistProgress = async (seconds: number, totalSeconds: number) => {
+  const persistProgress = useCallback(async (seconds: number, totalSeconds: number) => {
     if (!user || !lesson) return
 
     const roundedSeconds = Math.max(0, Math.floor(seconds))
@@ -79,7 +79,7 @@ export const WatchPage = () => {
       totalSeconds: roundedTotal,
       isCompleted: completed,
     })
-  }
+  }, [lesson, user])
 
   useEffect(() => {
     const load = async () => {
@@ -110,7 +110,7 @@ export const WatchPage = () => {
         playerRef.current.destroy()
       }
     }
-  }, [lessonId, user])
+  }, [lessonId, stopAutoSave, user])
 
   useEffect(() => {
     if (!lesson) return
@@ -179,7 +179,7 @@ export const WatchPage = () => {
     return () => {
       stopAutoSave()
     }
-  }, [lesson])
+  }, [lesson, persistProgress, stopAutoSave])
 
   const handleSave = async () => {
     const currentTime = Number(playerRef.current?.getCurrentTime?.() ?? savedSeconds)

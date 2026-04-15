@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { createClient } from '@supabase/supabase-js'
 import { createHash } from 'crypto'
 
@@ -19,16 +21,6 @@ const getHeader = (req: any, name: string) => {
   const raw = headers[lower] ?? headers[name] ?? headers[name.toUpperCase()]
   if (Array.isArray(raw)) return typeof raw[0] === 'string' ? raw[0] : null
   return typeof raw === 'string' ? raw : null
-}
-
-const toRequestUrl = (req: any) => {
-  if (typeof req?.url === 'string' && /^https?:\/\//.test(req.url)) {
-    return new URL(req.url)
-  }
-  const proto = getHeader(req, 'x-forwarded-proto') ?? 'https'
-  const host = getHeader(req, 'x-forwarded-host') ?? getHeader(req, 'host') ?? 'localhost'
-  const path = typeof req?.url === 'string' ? req.url : '/'
-  return new URL(`${proto}://${host}${path}`)
 }
 
 const getCorsOrigin = (req: any) => {
@@ -120,7 +112,6 @@ const logAcceptAttempt = async (params: {
     })
   } catch (error) {
     // Do not block invite acceptance on logging failures.
-    // eslint-disable-next-line no-console
     console.error('invite accept log failed', error)
   }
 }
