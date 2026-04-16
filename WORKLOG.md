@@ -111,3 +111,12 @@
   - A（デプロイ用）: `deliverables/lms-app/20260416/lms-app_A_deploy_20260416_720080f.zip`
     - `dist.zip` / `supabase/` / `ops/` / `README.md` / `.env.example`
   - B（ソース納品用）: `deliverables/lms-app/20260416/lms-app_B_source_20260416_720080f.zip`（`git archive`）
+
+## 2026-04-17 (Planned)
+- 本番稼働に向けた運用準備を順番に実施
+  1. 秘密情報の棚卸し（Vercel / Supabase / Resend）
+  2. Supabase運用設定・migration最終確認（admin権限 / RLS）
+  3. メール配信の安定化（Resendドメイン検証、`INVITE_FROM_EMAIL` 確認）
+  4. 監視と障害対応（Vercelログ/通知、Supabaseアラート）
+  5. 監査ログ運用（CSVエクスポートを1回実施し保存先・権限を確定）
+  6. 最終E2E（招待→受諾→視聴→管理ログ→CSV）
