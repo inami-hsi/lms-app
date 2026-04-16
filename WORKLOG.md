@@ -85,3 +85,29 @@
   - `npm run test:cursor`（admin-logs cursor/sort ロジック）
   - `npm run test:invite`（招待受諾の判定ロジック）
   - `npm run test:invite-admin`（招待管理のレート制限/リンク生成ロジック）
+
+## 2026-04-16
+- 静的チェック修正
+  - `npm run lint` が通るように調整（`api/*` の `no-explicit-any` と未使用変数、`WatchPage` の hooks deps）
+  - commit: `a2cc04f`（Make lint pass）
+- デプロイ準備（Xserver向け）
+  - `public/.htaccess` を追加（React Router の SPA fallback）
+  - `.env.example` に `VITE_API_BASE_URL` / `CORS_ALLOWED_ORIGINS` を追記
+  - `npm run build` 実行 → `dist.zip` 作成
+  - commit: `2cc280d`（Prep deploy env example and SPA htaccess）
+- 本番反映（Xserver）
+  - `public_html/lms.ai-nagoya.com` に `dist` の中身を上書き配置（`index.html` / `assets/` / `.htaccess` 等）
+  - `.htaccess` 差し替え後、`/admin/users` 直打ちで 404 にならないことを確認
+  - 管理画面ログは「全期間」だと表示される（`24時間` は該当データが無いと 0 件になる）
+- Supabase migration 適用（既存環境）
+  - `invite_api_request_logs.action` の CHECK に `accept` を追加（`action = ANY(ARRAY[...])` 形式も検出できるよう migration を修正）
+  - commit: `56864a6`（Fix accept action migration）
+  - 適用確認: `invite_api_request_logs_action_check` に `accept` が含まれることを確認
+- Ops ドキュメント整備
+  - 月次 CSV エクスポート手順: `ops/audit-exports/README.md`（commit: `0be9ae7`）
+  - README からリンク: `README.md`（commit: `6560402`）
+  - デプロイ手順チェックリスト: `ops/DEPLOY_CHECKLIST.md`（commit: `720080f`）
+- パッケージ化（成果物ZIP作成）
+  - A（デプロイ用）: `deliverables/lms-app/20260416/lms-app_A_deploy_20260416_720080f.zip`
+    - `dist.zip` / `supabase/` / `ops/` / `README.md` / `.env.example`
+  - B（ソース納品用）: `deliverables/lms-app/20260416/lms-app_B_source_20260416_720080f.zip`（`git archive`）
