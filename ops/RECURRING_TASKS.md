@@ -26,6 +26,7 @@ This document defines recurring operations tasks and ready-to-send reminder temp
     - Vercel project
     - Supabase project
     - Resend account
+- Guide: `ops/ACCESS_REVIEW.md`
 
 ## Quarterly
 ### 3) Secrets rotation (if policy requires)

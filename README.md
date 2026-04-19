@@ -189,6 +189,7 @@ Run this checklist on `https://lms.ai-nagoya.com`:
 - Recurring ops tasks: `ops/RECURRING_TASKS.md`
 - Key rotation procedure: `ops/KEY_ROTATION.md`
 - Release archive script: `scripts/new-release-bundle.ps1`
+- Access review & offboarding: `ops/ACCESS_REVIEW.md`
 
 ## Supabase Schema / Migrations
 - New project setup: run `supabase/schema.sql` in Supabase SQL Editor.
