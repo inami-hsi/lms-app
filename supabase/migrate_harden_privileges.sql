@@ -14,8 +14,9 @@ revoke all privileges on all routines in schema public from anon, authenticated;
 
 -- 2) Re-grant only what the client app needs
 -- Courses/Lessons: authenticated users can read (RLS still applies)
-grant select on table public.courses to authenticated;
-grant select on table public.lessons to authenticated;
+-- Note: Admin writes are protected by RLS (public.is_admin()).
+grant select, insert, update, delete on table public.courses to authenticated;
+grant select, insert, update, delete on table public.lessons to authenticated;
 
 -- Profiles: the app upserts/updates the logged-in user's row (RLS restricts to own id)
 grant select, insert, update on table public.profiles to authenticated;

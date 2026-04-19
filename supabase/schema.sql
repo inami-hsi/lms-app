@@ -319,8 +319,8 @@ revoke all privileges on all tables in schema public from anon, authenticated;
 revoke all privileges on all sequences in schema public from anon, authenticated;
 revoke all privileges on all routines in schema public from anon, authenticated;
 
-grant select on table public.courses to authenticated;
-grant select on table public.lessons to authenticated;
+grant select, insert, update, delete on table public.courses to authenticated;
+grant select, insert, update, delete on table public.lessons to authenticated;
 grant select, insert, update on table public.profiles to authenticated;
 grant select on table public.allowed_emails to authenticated;
 grant select, insert, update on table public.watch_progress to authenticated;

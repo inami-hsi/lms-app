@@ -29,20 +29,28 @@ export const AdminCoursesPage = () => {
 
   const handleCreate = async () => {
     if (!title.trim()) return
-    const created = await createCourse({
-      title: title.trim(),
-      description: description.trim(),
-    })
-    setCourses((current) => [created, ...current])
-    setTitle('')
-    setDescription('')
-    setMessage('コースを追加しました（下書き）。公開するには「公開する」を押してください。')
+    try {
+      const created = await createCourse({
+        title: title.trim(),
+        description: description.trim(),
+      })
+      setCourses((current) => [created, ...current])
+      setTitle('')
+      setDescription('')
+      setMessage('コースを追加しました（下書き）。公開するには「公開する」を押してください。')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'コースの追加に失敗しました。')
+    }
   }
 
   const toggleCoursePublished = async (course: Course) => {
-    const updated = await setCoursePublished(course.id, !course.isPublished)
-    setCourses((current) => current.map((item) => (item.id === updated.id ? updated : item)))
-    setMessage(updated.isPublished ? 'コースを公開しました。' : 'コースを下書きに戻しました。')
+    try {
+      const updated = await setCoursePublished(course.id, !course.isPublished)
+      setCourses((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+      setMessage(updated.isPublished ? 'コースを公開しました。' : 'コースを下書きに戻しました。')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'コースの更新に失敗しました。')
+    }
   }
 
   const openLessons = async (courseId: string) => {
@@ -51,46 +59,58 @@ export const AdminCoursesPage = () => {
       return
     }
 
-    setExpandedCourseId(courseId)
-    if (!lessonsByCourse[courseId]) {
-      const lessons = await listLessonsByCourse(courseId)
-      setLessonsByCourse((current) => ({ ...current, [courseId]: lessons }))
-      const nextOrder = lessons.length > 0 ? Math.max(...lessons.map((l) => l.order)) + 1 : 1
-      setLessonOrder(nextOrder)
+    try {
+      setExpandedCourseId(courseId)
+      if (!lessonsByCourse[courseId]) {
+        const lessons = await listLessonsByCourse(courseId)
+        setLessonsByCourse((current) => ({ ...current, [courseId]: lessons }))
+        const nextOrder = lessons.length > 0 ? Math.max(...lessons.map((l) => l.order)) + 1 : 1
+        setLessonOrder(nextOrder)
+      }
+      setMessage('')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'レッスンの取得に失敗しました。')
     }
-    setMessage('')
   }
 
   const handleCreateLesson = async () => {
     if (!expandedCourseId) return
 
-    const created = await createLesson({
-      courseId: expandedCourseId,
-      title: lessonTitle,
-      youtubeVideoId: lessonYoutubeId,
-      order: lessonOrder,
-    })
+    try {
+      const created = await createLesson({
+        courseId: expandedCourseId,
+        title: lessonTitle,
+        youtubeVideoId: lessonYoutubeId,
+        order: lessonOrder,
+      })
 
-    setLessonsByCourse((current) => ({
-      ...current,
-      [expandedCourseId]: [...(current[expandedCourseId] ?? []), created].sort((a, b) => a.order - b.order),
-    }))
-    setLessonTitle('')
-    setLessonYoutubeId('')
-    setLessonOrder((current) => current + 1)
-    setMessage('レッスンを追加しました（下書き）。公開するには「公開する」を押してください。')
+      setLessonsByCourse((current) => ({
+        ...current,
+        [expandedCourseId]: [...(current[expandedCourseId] ?? []), created].sort((a, b) => a.order - b.order),
+      }))
+      setLessonTitle('')
+      setLessonYoutubeId('')
+      setLessonOrder((current) => current + 1)
+      setMessage('レッスンを追加しました（下書き）。公開するには「公開する」を押してください。')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'レッスンの追加に失敗しました。')
+    }
   }
 
   const toggleLessonPublished = async (lesson: Lesson) => {
-    const updated = await setLessonPublished(lesson.id, !lesson.isPublished)
-    setLessonsByCourse((current) => {
-      const list = current[updated.courseId] ?? []
-      return {
-        ...current,
-        [updated.courseId]: list.map((item) => (item.id === updated.id ? updated : item)).sort((a, b) => a.order - b.order),
-      }
-    })
-    setMessage(updated.isPublished ? 'レッスンを公開しました。' : 'レッスンを下書きに戻しました。')
+    try {
+      const updated = await setLessonPublished(lesson.id, !lesson.isPublished)
+      setLessonsByCourse((current) => {
+        const list = current[updated.courseId] ?? []
+        return {
+          ...current,
+          [updated.courseId]: list.map((item) => (item.id === updated.id ? updated : item)).sort((a, b) => a.order - b.order),
+        }
+      })
+      setMessage(updated.isPublished ? 'レッスンを公開しました。' : 'レッスンを下書きに戻しました。')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'レッスンの更新に失敗しました。')
+    }
   }
 
   return (

@@ -195,6 +195,7 @@ Run this checklist on `https://lms.ai-nagoya.com`:
 - New project setup: run `supabase/schema.sql` in Supabase SQL Editor.
 - Existing project updates: apply `supabase/migrate_*.sql` as needed.
   - `supabase/migrate_add_accept_action.sql`: enables `ACCEPT` logging in `invite_api_request_logs`.
+  - `supabase/migrate_courses_lessons_write_grants.sql`: fixes admin write permissions for courses/lessons.
   - `supabase/migrate_calendar_feed.sql`: per-user Google Calendar subscription feed (ICS).
 
 ## Ops: CSV Export Routine
