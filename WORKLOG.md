@@ -120,3 +120,15 @@
   4. 監視と障害対応（Vercelログ/通知、Supabaseアラート）
   5. 監査ログ運用（CSVエクスポートを1回実施し保存先・権限を確定）
   6. 最終E2E（招待→受諾→視聴→管理ログ→CSV）
+
+## 2026-04-19
+- 本番稼働に向けた運用準備（Step1-6）を完了
+  - Secretsチェックリスト追加: `ops/SECRETS_CHECKLIST.md`
+  - Vercel env: `CORS_ALLOWED_ORIGINS=https://lms.ai-nagoya.com` を追加
+  - Supabase: admin profile / RLS / policies / grants を確認
+  - Resend: `ai-nagoya.com` Verified、招待メール送信ログ `success` を確認
+  - CSVエクスポート（7日）を実施し命名規則に合わせて保存
+    - ローカル控え: `deliverables/lms-app/20260419/audit-exports/`
+    - Google Drive（共有ドライブ）: `ops/audit-exports/`（制限付き）へアップロード
+  - 最終E2E（招待 create→accept→視聴→ログ/CSV）完了
+  - 実施記録: `ops/deploy-runs/2026-04-19.md`

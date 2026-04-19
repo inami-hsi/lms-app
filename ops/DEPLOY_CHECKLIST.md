@@ -92,3 +92,8 @@ Important check (ACCEPT logging):
   - [ ] `invite_email_logs_YYYY-MM-DD.csv`
   - [ ] `invite_api_request_logs_YYYY-MM-DD.csv`
 
+---
+
+## 7) Record the run
+- [ ] Fill in `ops/deploy-runs/YYYY-MM-DD.md` (see `ops/deploy-runs/README.md`)
+- [ ] Confirm the shared drive upload path is recorded (restricted access)
