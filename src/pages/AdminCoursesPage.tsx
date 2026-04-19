@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { createCourse, createLesson, listCourses, listLessonsByCourse, setCoursePublished, setLessonPublished } from '../data/lmsRepository'
+import {
+  createCourse,
+  createLesson,
+  listCourses,
+  listLessonsByCourse,
+  setCoursePublished,
+  setCourseThumbnailUrl,
+  setLessonPublished,
+} from '../data/lmsRepository'
 import type { Course, Lesson } from '../types/lms'
 
 export const AdminCoursesPage = () => {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [thumbnailUrl, setThumbnailUrl] = useState('')
   const [courses, setCourses] = useState<Course[]>([])
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null)
   const [lessonsByCourse, setLessonsByCourse] = useState<Record<string, Lesson[]>>({})
@@ -13,6 +22,7 @@ export const AdminCoursesPage = () => {
   const [lessonYoutubeId, setLessonYoutubeId] = useState('')
   const [lessonOrder, setLessonOrder] = useState(1)
   const [message, setMessage] = useState('')
+  const [thumbnailEdits, setThumbnailEdits] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const load = async () => {
@@ -44,13 +54,31 @@ export const AdminCoursesPage = () => {
       await createCourse({
         title: title.trim(),
         description: description.trim(),
+        thumbnailUrl: thumbnailUrl.trim() || undefined,
       })
       await refreshCourses()
       setTitle('')
       setDescription('')
+      setThumbnailUrl('')
       setMessage('コースを追加しました（下書き）。公開するには「公開する」を押してください。')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'コースの追加に失敗しました。')
+    }
+  }
+
+  const handleUpdateThumbnail = async (course: Course) => {
+    const value = (thumbnailEdits[course.id] ?? course.thumbnailUrl).trim()
+    try {
+      await setCourseThumbnailUrl(course.id, value)
+      await refreshCourses()
+      setThumbnailEdits((current) => {
+        const next = { ...current }
+        delete next[course.id]
+        return next
+      })
+      setMessage('サムネイルを更新しました。')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'サムネイルの更新に失敗しました。')
     }
   }
 
@@ -118,6 +146,7 @@ export const AdminCoursesPage = () => {
       <div className="form-grid">
         <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="コース名" />
         <input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="説明" />
+        <input value={thumbnailUrl} onChange={(event) => setThumbnailUrl(event.target.value)} placeholder="サムネURL（任意）" />
         <button type="button" className="button primary" onClick={() => void handleCreate()}>コースを追加</button>
       </div>
 
@@ -127,6 +156,24 @@ export const AdminCoursesPage = () => {
             <div>
               <h3>{course.title}</h3>
               <p className="muted">{course.description}</p>
+              <div className="inline-actions" style={{ marginTop: 8 }}>
+                <img
+                  src={course.thumbnailUrl}
+                  alt=""
+                  width={96}
+                  height={54}
+                  style={{ borderRadius: 8, objectFit: 'cover', border: '1px solid var(--gray-200)' }}
+                />
+                <input
+                  value={thumbnailEdits[course.id] ?? course.thumbnailUrl}
+                  onChange={(event) => setThumbnailEdits((current) => ({ ...current, [course.id]: event.target.value }))}
+                  placeholder="サムネURL"
+                  style={{ minWidth: 240, flex: 1 }}
+                />
+                <button type="button" className="button secondary" onClick={() => void handleUpdateThumbnail(course)}>
+                  サムネ更新
+                </button>
+              </div>
             </div>
             <div className="row-actions">
               <span className={`badge ${course.isPublished ? 'success' : 'warning'}`}>

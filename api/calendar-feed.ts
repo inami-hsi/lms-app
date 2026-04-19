@@ -66,6 +66,19 @@ const atUtc = (date: Date, hour: number, minute = 0) => {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), hour, minute, 0))
 }
 
+const isWeekendUtcDate = (date: Date) => {
+  const day = date.getUTCDay()
+  return day === 0 || day === 6
+}
+
+const nextWeekdayUtcMidnight = (date: Date) => {
+  let d = date
+  while (isWeekendUtcDate(d)) {
+    d = addDaysUtcMidnight(d, 1)
+  }
+  return d
+}
+
 const maxDate = (a: Date, b: Date) => (a.getTime() >= b.getTime() ? a : b)
 
 export default async function handler(req: any, res?: any) {
@@ -129,7 +142,7 @@ export default async function handler(req: any, res?: any) {
 
   const { data: feed } = await adminClient
     .from('calendar_feeds')
-    .select('user_id, start_date, cadence_days, deadline_days')
+    .select('user_id, start_date, cadence_days, lessons_per_day, skip_weekends, course_cadence_days, deadline_days')
     .eq('id', tokenRow.feed_id)
     .maybeSingle()
 
@@ -152,6 +165,9 @@ export default async function handler(req: any, res?: any) {
 
   const userId = feed.user_id as string
   const cadenceDays = Math.max(1, Math.min(30, Number(feed.cadence_days ?? 1)))
+  const lessonsPerDay = Math.max(1, Math.min(5, Number((feed as any).lessons_per_day ?? 1)))
+  const skipWeekends = Boolean((feed as any).skip_weekends)
+  const courseCadenceDays = ((feed as any).course_cadence_days ?? {}) as Record<string, unknown>
   const deadlineDays = Math.max(1, Math.min(90, Number(feed.deadline_days ?? 7)))
 
   const startDateStr = typeof feed.start_date === 'string' ? feed.start_date : null
@@ -240,21 +256,89 @@ export default async function handler(req: any, res?: any) {
   lines.push('METHOD:PUBLISH')
 
   const dtstamp = formatUtc(now)
-  let offset = 0
   const maxEvents = 200
 
+  // Build per-course queues (round-robin)
+  const queues = new Map<string, LessonRow[]>()
   for (const lesson of lessons) {
     if (completed.has(lesson.id)) continue
-    const startDay = addDaysUtcMidnight(anchor, offset * cadenceDays)
-    const startTime = atUtc(startDay, 0, 0) // 09:00 JST
-    const endTime = atUtc(startDay, 0, 30) // 30 mins placeholder
-    const deadlineDay = addDaysUtcMidnight(startDay, deadlineDays)
+    const list = queues.get(lesson.course_id) ?? []
+    list.push(lesson)
+    queues.set(lesson.course_id, list)
+  }
+  const courseIdsInOrder = Array.from(queues.keys()).sort((a, b) => {
+    const ta = courseTitleById.get(a) ?? ''
+    const tb = courseTitleById.get(b) ?? ''
+    return ta.localeCompare(tb)
+  })
+
+  const parsedOverrides: Record<string, number> = {}
+  for (const [key, raw] of Object.entries(courseCadenceDays)) {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n >= 1 && n <= 30) parsedOverrides[key] = Math.floor(n)
+  }
+
+  const lastStartByCourse = new Map<string, Date>()
+  let currentDay = skipWeekends ? nextWeekdayUtcMidnight(anchor) : anchor
+  let slotsUsed = 0
+  let courseIndex = 0
+  let scheduledLessons = 0
+
+  const advanceDay = () => {
+    currentDay = addDaysUtcMidnight(currentDay, 1)
+    if (skipWeekends) currentDay = nextWeekdayUtcMidnight(currentDay)
+    slotsUsed = 0
+  }
+
+  const pickCourse = () => {
+    const n = courseIdsInOrder.length
+    if (n === 0) return null
+    for (let attempt = 0; attempt < n; attempt += 1) {
+      const idx = (courseIndex + attempt) % n
+      const cid = courseIdsInOrder[idx]
+      const queue = queues.get(cid)
+      if (!queue || queue.length === 0) continue
+      const cadence = parsedOverrides[cid] ?? cadenceDays
+      const last = lastStartByCourse.get(cid)
+      if (last) {
+        const earliest = addDaysUtcMidnight(last, cadence)
+        if (currentDay.getTime() < earliest.getTime()) continue
+      }
+      courseIndex = (idx + 1) % n
+      return cid
+    }
+    return null
+  }
+
+  while (scheduledLessons * 2 < maxEvents) {
+    if (courseIdsInOrder.every((cid) => (queues.get(cid)?.length ?? 0) === 0)) break
+
+    if (skipWeekends) currentDay = nextWeekdayUtcMidnight(currentDay)
+
+    const cid = pickCourse()
+    if (!cid) {
+      advanceDay()
+      continue
+    }
+
+    const queue = queues.get(cid)
+    if (!queue || queue.length === 0) {
+      advanceDay()
+      continue
+    }
+
+    const lesson = queue.shift()!
+    const startHourUtc = Math.min(4, slotsUsed) // 09:00, 10:00, 11:00 ... JST
+    const startTime = atUtc(currentDay, startHourUtc, 0)
+    const endTime = atUtc(currentDay, startHourUtc, 30)
+
+    let deadlineDay = addDaysUtcMidnight(currentDay, deadlineDays)
+    if (skipWeekends) deadlineDay = nextWeekdayUtcMidnight(deadlineDay)
     const deadlineTime = atUtc(deadlineDay, 9, 0) // 18:00 JST
 
     const courseTitle = courseTitleById.get(lesson.course_id) ?? 'Course'
     const lessonUrl = `${baseAppUrl}/watch/${lesson.id}`
 
-    // Start event
     lines.push('BEGIN:VEVENT')
     lines.push(`UID:${escapeText(`lms-${tokenHash.slice(0, 12)}-${lesson.id}-start`)}`)
     lines.push(`DTSTAMP:${dtstamp}`)
@@ -265,7 +349,6 @@ export default async function handler(req: any, res?: any) {
     lines.push(`DESCRIPTION:${escapeText(`Lesson: ${lesson.title}\\nOpen: ${lessonUrl}`)}`)
     lines.push('END:VEVENT')
 
-    // Deadline event
     lines.push('BEGIN:VEVENT')
     lines.push(`UID:${escapeText(`lms-${tokenHash.slice(0, 12)}-${lesson.id}-deadline`)}`)
     lines.push(`DTSTAMP:${dtstamp}`)
@@ -276,8 +359,12 @@ export default async function handler(req: any, res?: any) {
     lines.push(`DESCRIPTION:${escapeText(`Deadline for: ${lesson.title}\\nOpen: ${lessonUrl}`)}`)
     lines.push('END:VEVENT')
 
-    offset += 1
-    if (offset * 2 >= maxEvents) break
+    lastStartByCourse.set(cid, currentDay)
+    slotsUsed += 1
+    scheduledLessons += 1
+    if (slotsUsed >= lessonsPerDay) {
+      advanceDay()
+    }
   }
 
   lines.push('END:VCALENDAR')
@@ -301,4 +388,3 @@ export default async function handler(req: any, res?: any) {
     },
   })
 }
-

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { useAuth } from '../auth/AuthContext'
 import { issueCalendarFeed, listCourses, listLessonsByCourse, listProgressByUser } from '../data/lmsRepository'
+import type { Course } from '../types/lms'
 
 export const MyPage = () => {
   const { user } = useAuth()
@@ -11,8 +12,12 @@ export const MyPage = () => {
   const [calendarStartDate, setCalendarStartDate] = useState<string>('')
   const [calendarCadenceDays, setCalendarCadenceDays] = useState(1)
   const [calendarDeadlineDays, setCalendarDeadlineDays] = useState(7)
+  const [calendarLessonsPerDay, setCalendarLessonsPerDay] = useState(1)
+  const [calendarSkipWeekends, setCalendarSkipWeekends] = useState(false)
+  const [calendarCourseCadence, setCalendarCourseCadence] = useState<Record<string, number>>({})
   const [calendarMessage, setCalendarMessage] = useState<string | null>(null)
   const [isIssuingCalendar, setIsIssuingCalendar] = useState(false)
+  const [publishedCourses, setPublishedCourses] = useState<Course[]>([])
 
   const todayIsoDate = useMemo(() => new Date().toISOString().slice(0, 10), [])
   const CALENDAR_STORAGE_KEY = 'lms.calendarFeedUrl'
@@ -27,6 +32,7 @@ export const MyPage = () => {
 
       const [courses, progress] = await Promise.all([listCourses(), listProgressByUser(user.id)])
       const visibleCourses = user.role === 'admin' ? courses : courses.filter((course) => course.isPublished)
+      setPublishedCourses(visibleCourses.filter((course) => course.isPublished))
       const rows = await Promise.all(
         visibleCourses.map(async (course) => {
           const lessons = await listLessonsByCourse(course.id)
@@ -77,6 +83,9 @@ export const MyPage = () => {
         startDate: calendarStartDate || undefined,
         cadenceDays: calendarCadenceDays,
         deadlineDays: calendarDeadlineDays,
+        lessonsPerDay: calendarLessonsPerDay,
+        skipWeekends: calendarSkipWeekends,
+        courseCadenceDays: calendarCourseCadence,
       })
       setCalendarFeedUrl(result.feedUrl)
       window.localStorage.setItem(CALENDAR_STORAGE_KEY, result.feedUrl)
@@ -155,10 +164,61 @@ export const MyPage = () => {
               onChange={(e) => setCalendarDeadlineDays(Math.max(1, Math.min(90, Number(e.target.value) || 7)))}
             />
           </label>
+          <label style={{ display: 'grid', gap: 4 }}>
+            <span className="muted">1日あたり</span>
+            <input
+              type="number"
+              min={1}
+              max={5}
+              value={calendarLessonsPerDay}
+              onChange={(e) => setCalendarLessonsPerDay(Math.max(1, Math.min(5, Number(e.target.value) || 1)))}
+            />
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span className="muted">土日スキップ</span>
+            <input type="checkbox" checked={calendarSkipWeekends} onChange={(e) => setCalendarSkipWeekends(e.target.checked)} />
+          </label>
           <button type="button" className="button primary" onClick={() => void handleIssueCalendar()} disabled={isIssuingCalendar}>
             {isIssuingCalendar ? '発行中...' : '購読URLを発行'}
           </button>
         </div>
+
+        {publishedCourses.length > 0 && (
+          <details style={{ marginTop: 10 }}>
+            <summary className="muted">コースごとの間隔（日）を設定（任意）</summary>
+            <div className="table-like" style={{ marginTop: 10 }}>
+              {publishedCourses.map((course) => (
+                <div key={course.id} className="row">
+                  <div style={{ flex: 1 }}>
+                    <h3>{course.title}</h3>
+                    <p className="muted">未設定なら「間隔（日）」が適用されます。</p>
+                  </div>
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={calendarCourseCadence[course.id] ?? ''}
+                    placeholder="未設定"
+                    onChange={(e) => {
+                      const raw = e.target.value
+                      const parsed = raw === '' ? null : Math.max(1, Math.min(30, Number(raw) || 1))
+                      setCalendarCourseCadence((current) => {
+                        const next = { ...current }
+                        if (parsed == null) {
+                          delete next[course.id]
+                        } else {
+                          next[course.id] = parsed
+                        }
+                        return next
+                      })
+                    }}
+                    style={{ width: 120 }}
+                  />
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
 
         {calendarMessage && <p className="muted" style={{ marginTop: 8 }}>{calendarMessage}</p>}
 

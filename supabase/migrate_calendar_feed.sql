@@ -14,6 +14,9 @@ create table if not exists public.calendar_feeds (
   user_id uuid not null unique references auth.users(id) on delete cascade,
   start_date date,
   cadence_days integer not null default 1,
+  lessons_per_day integer not null default 1,
+  skip_weekends boolean not null default false,
+  course_cadence_days jsonb not null default '{}'::jsonb,
   deadline_days integer not null default 7,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -51,4 +54,3 @@ with check (public.is_admin());
 -- Ensure client roles don't gain access.
 revoke all privileges on table public.calendar_feeds from anon, authenticated;
 revoke all privileges on table public.calendar_feed_tokens from anon, authenticated;
-

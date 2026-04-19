@@ -198,6 +198,7 @@ Run this checklist on `https://lms.ai-nagoya.com`:
   - `supabase/migrate_add_accept_action.sql`: enables `ACCEPT` logging in `invite_api_request_logs`.
   - `supabase/migrate_courses_lessons_write_grants.sql`: fixes admin write permissions for courses/lessons.
   - `supabase/migrate_calendar_feed.sql`: per-user Google Calendar subscription feed (ICS).
+  - `supabase/migrate_calendar_feed_settings.sql`: calendar feed options (skip weekends / lessons per day / per-course cadence).
 
 ## Ops: CSV Export Routine
 To keep a simple audit trail outside Supabase, export CSVs periodically from:

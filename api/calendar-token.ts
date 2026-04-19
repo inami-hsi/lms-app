@@ -7,6 +7,9 @@ type RequestBody = {
   startDate?: string
   cadenceDays?: number
   deadlineDays?: number
+  lessonsPerDay?: number
+  skipWeekends?: boolean
+  courseCadenceDays?: Record<string, number>
 }
 
 const getHeader = (req: any, name: string) => {
@@ -125,6 +128,19 @@ const clampInt = (value: unknown, fallback: number, min: number, max: number) =>
   return Math.max(min, Math.min(max, Math.floor(n)))
 }
 
+const parseCourseCadence = (value: unknown) => {
+  if (!value || typeof value !== 'object') return {}
+  const record = value as Record<string, unknown>
+  const result: Record<string, number> = {}
+  const entries = Object.entries(record).slice(0, 50)
+  for (const [key, raw] of entries) {
+    if (typeof key !== 'string' || key.length > 80) continue
+    const days = clampInt(raw, 0, 0, 30)
+    if (days >= 1) result[key] = days
+  }
+  return result
+}
+
 export default async function handler(req: any, res?: any) {
   if (req.method === 'OPTIONS') {
     const corsHeaders = buildCorsHeaders(req)
@@ -171,8 +187,15 @@ export default async function handler(req: any, res?: any) {
   const startDate = parseIsoDate(body.startDate)
   const cadenceDays = clampInt(body.cadenceDays, 1, 1, 30)
   const deadlineDays = clampInt(body.deadlineDays, 7, 1, 90)
+  const lessonsPerDay = clampInt(body.lessonsPerDay, 1, 1, 5)
+  const skipWeekends = Boolean(body.skipWeekends)
+  const courseCadenceDays = parseCourseCadence(body.courseCadenceDays)
 
-  const { data: existingFeed } = await adminClient.from('calendar_feeds').select('id, start_date').eq('user_id', userId).maybeSingle()
+  const { data: existingFeed } = await adminClient
+    .from('calendar_feeds')
+    .select('id, start_date')
+    .eq('user_id', userId)
+    .maybeSingle()
 
   const startToStore = startDate ?? (existingFeed?.start_date as string | null) ?? new Date().toISOString().slice(0, 10)
 
@@ -184,6 +207,9 @@ export default async function handler(req: any, res?: any) {
         user_id: userId,
         start_date: startToStore,
         cadence_days: cadenceDays,
+        lessons_per_day: lessonsPerDay,
+        skip_weekends: skipWeekends,
+        course_cadence_days: courseCadenceDays,
         deadline_days: deadlineDays,
         updated_at: new Date().toISOString(),
       },
@@ -237,7 +263,7 @@ export default async function handler(req: any, res?: any) {
     200,
     {
       feedUrl,
-      settings: { startDate: startToStore, cadenceDays, deadlineDays },
+      settings: { startDate: startToStore, cadenceDays, deadlineDays, lessonsPerDay, skipWeekends, courseCadenceDays },
     },
     res,
   )

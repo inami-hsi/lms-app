@@ -474,27 +474,56 @@ export const setCoursePublished = async (courseId: string, isPublished: boolean)
   return toCourse(data as DbCourse)
 }
 
-export const createCourse = async (input: { title: string; description: string }) => {
+export const createCourse = async (input: { title: string; description: string; thumbnailUrl?: string }) => {
   if (!isSupabaseConfigured || !supabase) {
     const course: Course = {
       id: crypto.randomUUID(),
       title: input.title,
       description: input.description || '説明未設定',
-      thumbnailUrl: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=1200&q=80',
+      thumbnailUrl:
+        input.thumbnailUrl?.trim() ||
+        'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=1200&q=80',
       isPublished: false,
     }
     demoCourses.unshift(course)
     return course
   }
 
+  const thumbnailUrl =
+    input.thumbnailUrl?.trim() || 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=1200&q=80'
+
   const { data, error } = await supabase
     .from('courses')
     .insert({
       title: input.title,
       description: input.description || '',
-      thumbnail_url: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=1200&q=80',
+      thumbnail_url: thumbnailUrl,
       is_published: false,
     })
+    .select('id, title, description, thumbnail_url, is_published')
+    .single()
+
+  if (error) throw error
+  return toCourse(data as DbCourse)
+}
+
+export const setCourseThumbnailUrl = async (courseId: string, thumbnailUrl: string) => {
+  const trimmed = thumbnailUrl.trim()
+  if (!trimmed) {
+    throw new Error('サムネURLを入力してください')
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    const course = demoCourses.find((item) => item.id === courseId)
+    if (!course) throw new Error('コースが見つかりません')
+    course.thumbnailUrl = trimmed
+    return course
+  }
+
+  const { data, error } = await supabase
+    .from('courses')
+    .update({ thumbnail_url: trimmed })
+    .eq('id', courseId)
     .select('id, title, description, thumbnail_url, is_published')
     .single()
 
@@ -889,6 +918,9 @@ export type CalendarFeedSettings = {
   startDate: string
   cadenceDays: number
   deadlineDays: number
+  lessonsPerDay: number
+  skipWeekends: boolean
+  courseCadenceDays: Record<string, number>
 }
 
 export type IssueCalendarFeedResponse = {
