@@ -49,5 +49,13 @@ This document defines recurring operations tasks and ready-to-send reminder temp
   - Follow `ops/DEPLOY_CHECKLIST.md`
   - Record the run in `ops/deploy-runs/YYYY-MM-DD.md`
 
+### 5) Archive deploy artifacts
+- When: every production deploy (same day)
+- Owner: Deployer
+- Task:
+  - Create and keep release artifacts under `deliverables/lms-app/releases/`
+  - Upload `dist_*.zip` and `lms-app_A_deploy_*.zip` to the shared drive (restricted)
+  - Script (Windows): `powershell -ExecutionPolicy Bypass -File scripts/new-release-bundle.ps1`
+
 ## Reminder templates
 See `ops/reminders/`.

@@ -188,6 +188,7 @@ Run this checklist on `https://lms.ai-nagoya.com`:
 - Monthly audit export routine: `ops/audit-exports/README.md`
 - Recurring ops tasks: `ops/RECURRING_TASKS.md`
 - Key rotation procedure: `ops/KEY_ROTATION.md`
+- Release archive script: `scripts/new-release-bundle.ps1`
 
 ## Supabase Schema / Migrations
 - New project setup: run `supabase/schema.sql` in Supabase SQL Editor.

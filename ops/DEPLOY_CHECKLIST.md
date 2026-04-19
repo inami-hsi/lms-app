@@ -21,6 +21,9 @@ Target date: `YYYY-MM-DD`
 
 Optional (upload-friendly):
 - [ ] Create `dist.zip` from `dist/*`
+- [ ] Archive release artifacts (recommended):
+  - [ ] `powershell -ExecutionPolicy Bypass -File scripts/new-release-bundle.ps1`
+  - [ ] Keep at least the latest 3 releases under `deliverables/lms-app/releases/`
 
 ---
 
