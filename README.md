@@ -190,6 +190,7 @@ Run this checklist on `https://lms.ai-nagoya.com`:
 - Key rotation procedure: `ops/KEY_ROTATION.md`
 - Release archive script: `scripts/new-release-bundle.ps1`
 - Access review & offboarding: `ops/ACCESS_REVIEW.md`
+- Learner guide (Google Calendar): `ops/templates/learner_google_calendar_guide.md`
 
 ## Supabase Schema / Migrations
 - New project setup: run `supabase/schema.sql` in Supabase SQL Editor.
