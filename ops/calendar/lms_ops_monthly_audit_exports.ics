@@ -1,0 +1,16 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//lms-app//ops//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:lms-ops-monthly-audit-exports@lms-app
+DTSTAMP:20260419T000000Z
+SUMMARY:LMS: Monthly audit CSV exports
+DESCRIPTION:Export Admin Logs CSVs (invite email logs + invite API logs) and upload to shared drive ops/audit-exports/. See ops/audit-exports/README.md
+DTSTART:20260501T010000Z
+DURATION:PT30M
+RRULE:FREQ=MONTHLY;BYMONTHDAY=1
+END:VEVENT
+END:VCALENDAR
+

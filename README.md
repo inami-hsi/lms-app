@@ -186,6 +186,7 @@ Run this checklist on `https://lms.ai-nagoya.com`:
 - Disaster recovery runbook: `ops/DR_RUNBOOK.md`
 - Incident response: `ops/INCIDENT_RESPONSE.md`
 - Monthly audit export routine: `ops/audit-exports/README.md`
+- Recurring ops tasks: `ops/RECURRING_TASKS.md`
 
 ## Supabase Schema / Migrations
 - New project setup: run `supabase/schema.sql` in Supabase SQL Editor.
