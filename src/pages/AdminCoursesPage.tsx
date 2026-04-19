@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { createCourse, createLesson, listCourses, listLessonsByCourse, setCoursePublished, setLessonPublished } from '../data/lmsRepository'
 import type { Course, Lesson } from '../types/lms'
@@ -22,6 +22,17 @@ export const AdminCoursesPage = () => {
     void load()
   }, [])
 
+  const refreshCourses = useCallback(async () => {
+    setCourses(await listCourses())
+  }, [])
+
+  const refreshLessons = useCallback(async (courseId: string) => {
+    const lessons = await listLessonsByCourse(courseId)
+    setLessonsByCourse((current) => ({ ...current, [courseId]: lessons }))
+    const nextOrder = lessons.length > 0 ? Math.max(...lessons.map((l) => l.order)) + 1 : 1
+    setLessonOrder(nextOrder)
+  }, [])
+
   const expandedLessons = useMemo(() => {
     if (!expandedCourseId) return []
     return lessonsByCourse[expandedCourseId] ?? []
@@ -30,11 +41,11 @@ export const AdminCoursesPage = () => {
   const handleCreate = async () => {
     if (!title.trim()) return
     try {
-      const created = await createCourse({
+      await createCourse({
         title: title.trim(),
         description: description.trim(),
       })
-      setCourses((current) => [created, ...current])
+      await refreshCourses()
       setTitle('')
       setDescription('')
       setMessage('コースを追加しました（下書き）。公開するには「公開する」を押してください。')
@@ -45,9 +56,10 @@ export const AdminCoursesPage = () => {
 
   const toggleCoursePublished = async (course: Course) => {
     try {
-      const updated = await setCoursePublished(course.id, !course.isPublished)
-      setCourses((current) => current.map((item) => (item.id === updated.id ? updated : item)))
-      setMessage(updated.isPublished ? 'コースを公開しました。' : 'コースを下書きに戻しました。')
+      const nextPublished = !course.isPublished
+      await setCoursePublished(course.id, nextPublished)
+      await refreshCourses()
+      setMessage(nextPublished ? 'コースを公開しました。' : 'コースを下書きに戻しました。')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'コースの更新に失敗しました。')
     }
@@ -61,12 +73,7 @@ export const AdminCoursesPage = () => {
 
     try {
       setExpandedCourseId(courseId)
-      if (!lessonsByCourse[courseId]) {
-        const lessons = await listLessonsByCourse(courseId)
-        setLessonsByCourse((current) => ({ ...current, [courseId]: lessons }))
-        const nextOrder = lessons.length > 0 ? Math.max(...lessons.map((l) => l.order)) + 1 : 1
-        setLessonOrder(nextOrder)
-      }
+      await refreshLessons(courseId)
       setMessage('')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'レッスンの取得に失敗しました。')
@@ -77,20 +84,15 @@ export const AdminCoursesPage = () => {
     if (!expandedCourseId) return
 
     try {
-      const created = await createLesson({
+      await createLesson({
         courseId: expandedCourseId,
         title: lessonTitle,
         youtubeVideoId: lessonYoutubeId,
         order: lessonOrder,
       })
-
-      setLessonsByCourse((current) => ({
-        ...current,
-        [expandedCourseId]: [...(current[expandedCourseId] ?? []), created].sort((a, b) => a.order - b.order),
-      }))
+      await refreshLessons(expandedCourseId)
       setLessonTitle('')
       setLessonYoutubeId('')
-      setLessonOrder((current) => current + 1)
       setMessage('レッスンを追加しました（下書き）。公開するには「公開する」を押してください。')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'レッスンの追加に失敗しました。')
@@ -99,15 +101,9 @@ export const AdminCoursesPage = () => {
 
   const toggleLessonPublished = async (lesson: Lesson) => {
     try {
-      const updated = await setLessonPublished(lesson.id, !lesson.isPublished)
-      setLessonsByCourse((current) => {
-        const list = current[updated.courseId] ?? []
-        return {
-          ...current,
-          [updated.courseId]: list.map((item) => (item.id === updated.id ? updated : item)).sort((a, b) => a.order - b.order),
-        }
-      })
-      setMessage(updated.isPublished ? 'レッスンを公開しました。' : 'レッスンを下書きに戻しました。')
+      await setLessonPublished(lesson.id, !lesson.isPublished)
+      await refreshLessons(lesson.courseId)
+      setMessage(!lesson.isPublished ? 'レッスンを公開しました。' : 'レッスンを下書きに戻しました。')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'レッスンの更新に失敗しました。')
     }
