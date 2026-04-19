@@ -132,3 +132,22 @@
     - Google Drive（共有ドライブ）: `ops/audit-exports/`（制限付き）へアップロード
   - 最終E2E（招待 create→accept→視聴→ログ/CSV）完了
   - 実施記録: `ops/deploy-runs/2026-04-19.md`
+
+## 2026-04-20
+- 学習スケジュール（受講者ごと）: Googleカレンダー連携（ICS購読）を追加
+  - API: `api/calendar-token.ts`（購読URL発行）, `api/calendar-feed.ts`（ICS配信）
+  - Supabase: `supabase/migrate_calendar_feed.sql`（`calendar_feeds` / `calendar_feed_tokens`）
+  - フロント: `MyPage` に購読URL発行UIを追加
+  - 受講者向けガイド: `ops/templates/learner_google_calendar_guide.md`
+  - 招待メール本文にカレンダー案内を追記: `api/admin-invitations.ts`
+- 管理者のコース/レッスン作成を安定化
+  - Supabase権限: `courses/lessons` に `INSERT/UPDATE/DELETE` を付与する migration を追加
+    - `supabase/migrate_courses_lessons_write_grants.sql`
+  - AdminCoursesPage: 追加/公開切替後に再fetch（リロード不要化）
+- 監視/運用ドキュメント整備（この期間に追加）
+  - 障害対応: `ops/INCIDENT_RESPONSE.md`
+  - 定期運用/リマインド/ICS: `ops/RECURRING_TASKS.md`, `ops/reminders/*`, `ops/calendar/*`
+  - キー回転/権限レビュー: `ops/KEY_ROTATION.md`, `ops/ACCESS_REVIEW.md`
+- パッケージ更新（成果物ZIP）
+  - A（デプロイ用）: `deliverables/lms-app/20260420/lms-app_A_deploy_20260420_df46e49.zip`
+  - B（ソース納品用）: `deliverables/lms-app/20260420/lms-app_B_source_20260420_df46e49.zip`
