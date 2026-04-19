@@ -884,3 +884,47 @@ export const acceptInvitationToken = async (payload: {
   const json = (await response.json()) as { status?: AcceptInvitationResult }
   return json.status ?? 'invalid'
 }
+
+export type CalendarFeedSettings = {
+  startDate: string
+  cadenceDays: number
+  deadlineDays: number
+}
+
+export type IssueCalendarFeedResponse = {
+  feedUrl: string
+  settings: CalendarFeedSettings
+}
+
+export const issueCalendarFeed = async (input: Partial<CalendarFeedSettings> = {}): Promise<IssueCalendarFeedResponse> => {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabaseが未設定のため、カレンダー連携は利用できません。')
+  }
+
+  const accessToken = await getAccessToken()
+  if (!accessToken) {
+    throw new Error('セッションが取得できません。再ログインしてください。')
+  }
+
+  const response = await fetch(buildApiUrl('/api/calendar-token'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(input),
+  })
+
+  if (!response.ok) {
+    let message = 'カレンダー連携リンクの発行に失敗しました。'
+    try {
+      const body = (await response.json()) as { error?: string }
+      if (body.error) message = body.error
+    } catch {
+      // Keep default message.
+    }
+    throw new Error(message)
+  }
+
+  return (await response.json()) as IssueCalendarFeedResponse
+}
