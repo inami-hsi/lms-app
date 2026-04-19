@@ -97,3 +97,8 @@ Important check (ACCEPT logging):
 ## 7) Record the run
 - [ ] Fill in `ops/deploy-runs/YYYY-MM-DD.md` (see `ops/deploy-runs/README.md`)
 - [ ] Confirm the shared drive upload path is recorded (restricted access)
+
+---
+
+## 8) Incident readiness (optional)
+- [ ] Confirm `ops/INCIDENT_RESPONSE.md` matches current architecture/env var names

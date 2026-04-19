@@ -184,6 +184,7 @@ Run this checklist on `https://lms.ai-nagoya.com`:
 
 ## Ops / DR
 - Disaster recovery runbook: `ops/DR_RUNBOOK.md`
+- Incident response: `ops/INCIDENT_RESPONSE.md`
 - Monthly audit export routine: `ops/audit-exports/README.md`
 
 ## Supabase Schema / Migrations
