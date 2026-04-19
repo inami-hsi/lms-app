@@ -50,6 +50,19 @@ Use DevTools (Network tab) on `https://lms.ai-nagoya.com/admin/users`.
 - Dashboard → Logs (delivery failures, bounces)
 - Domains: sender domain status is Verified
 
+## 2.1) Alerting (GitHub Actions uptime check)
+This repo includes a scheduled workflow that checks:
+- Frontend: `https://lms.ai-nagoya.com/`
+- API: `<vercel>/api/invite-token?token=...` (expects HTTP 200 even if token is unknown)
+
+When the workflow fails, GitHub can email the repo watchers (depends on each user's GitHub notification settings).
+
+Setup:
+- GitHub repo → Settings → Secrets and variables → Actions → Variables
+  - Set `LMS_API_BASE_URL` if your Vercel project URL changes.
+- GitHub user settings → Notifications
+  - Enable notifications for Actions/Deployments failures (email/Slack as desired).
+
 ## 3) Common incidents & fixes
 ### A) `/admin/users` direct access returns 404
 Symptoms:
@@ -105,4 +118,3 @@ Fix:
 - Record a short incident note:
   - what happened / root cause (if known) / time to recover / next action
 - If recurring: add a preventative checklist item to `ops/DEPLOY_CHECKLIST.md`.
-

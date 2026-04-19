@@ -1,0 +1,32 @@
+name: Uptime Check
+
+on:
+  schedule:
+    # Every 15 minutes
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      FRONTEND_URL: https://lms.ai-nagoya.com/
+      # Override this in GitHub repo "Variables" as LMS_API_BASE_URL if the Vercel project URL changes.
+      API_BASE_URL: ${{ vars.LMS_API_BASE_URL || 'https://lms-app-kappa-nine.vercel.app' }}
+    steps:
+      - name: Check frontend
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /dev/null -w '%{http_code}' "$FRONTEND_URL")"
+          echo "frontend_status=$code"
+          test "$code" = "200"
+      - name: Check API (invite-token)
+        run: |
+          set -euo pipefail
+          url="$API_BASE_URL/api/invite-token?token=healthcheck-$(date +%s)"
+          code="$(curl -sS -o /dev/null -w '%{http_code}' "$url")"
+          echo "api_status=$code"
+          # 200 is expected even for unknown token (invitation=null).
+          test "$code" = "200"
+
