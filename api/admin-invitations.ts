@@ -142,6 +142,19 @@ const buildHtml = (inviteLink: string, expiresAt: string) => {
           招待を受諾する
         </a>
       </p>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" />
+      <h3 style="margin:0 0 6px;font-size:14px;">学習リマインド（Googleカレンダー連携）</h3>
+      <p style="margin:0 0 8px;">
+        受講登録後、マイページから「開始予定・締切」をGoogleカレンダーに表示できます（通知は各自で設定）。
+      </p>
+      <p style="margin:0 0 8px;">
+        マイページ: <a href="https://lms.ai-nagoya.com/mypage">https://lms.ai-nagoya.com/mypage</a>
+      </p>
+      <ol style="margin:0 0 8px;padding-left:18px;">
+        <li>マイページを開く</li>
+        <li>「Googleカレンダー連携（購読URL）」でURLを発行</li>
+        <li>Googleカレンダー → 他のカレンダー →「URLで追加」</li>
+      </ol>
       <p>有効期限: ${expiration}</p>
       <p style="font-size:12px;color:#6b7280;">このメールに心当たりがない場合は破棄してください。</p>
     </div>
