@@ -39,6 +39,7 @@ This document defines recurring operations tasks and ready-to-send reminder temp
   - Update Vercel env vars and redeploy
   - Record the change (date + reason) in a deploy run note: `ops/deploy-runs/YYYY-MM-DD.md`
 - Checklist: `ops/SECRETS_CHECKLIST.md`
+- Procedure: `ops/KEY_ROTATION.md`
 
 ## After each deploy (ad hoc)
 ### 4) Post-deploy smoke test + record
@@ -50,4 +51,3 @@ This document defines recurring operations tasks and ready-to-send reminder temp
 
 ## Reminder templates
 See `ops/reminders/`.
-

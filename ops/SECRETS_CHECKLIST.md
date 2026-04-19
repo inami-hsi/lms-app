@@ -54,4 +54,4 @@ This doc is a **fill-in checklist** for secret management. Do not paste real sec
   2. `RESEND_API_KEY`
   3. `SUPABASE_ANON_KEY` / rebuild frontend if needed
   4. Update Vercel env vars + redeploy
-
+- [ ] Procedure: `ops/KEY_ROTATION.md`
